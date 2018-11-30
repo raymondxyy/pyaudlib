@@ -1,5 +1,4 @@
 # Some functions to deal with I/O of different audio file formats
-# Author: Raymond Xia (yangyanx@andrew.cmu.edu)
 #
 # Change Log:
 #   * 2018/1/1: Clean up naming to be consistent with other files.
@@ -10,16 +9,11 @@ import numpy as np
 import os
 import subprocess
 import io
-from ..cfg import cfgload
-import pdb
 
 # Global variables used in this module
-config = cfgload()['io']
-__sph2pipe__ = str(config['sph2pipe'])
-__tmp__ = config['sphtmp']
-__support__ = ('wav', 'sph', 'flac', 'aiff')  # supported file types
+_sph2pipe = os.path.dirname(__file__)+'/../../tools/sph2pipe/sph2pipe'
 
-assert os.path.exists(__sph2pipe__)
+assert os.path.exists(_sph2pipe)
 
 
 def audioread(path, sr=None, start=0, stop=None, force_mono=False,
@@ -42,7 +36,7 @@ def audioread(path, sr=None, start=0, stop=None, force_mono=False,
     except RuntimeError:  # fix for sph pcm-embedded shortened v2
         if verbose:
             print('WARNING: Audio type not supported. Trying sph2pipe...')
-        wavbytes = subprocess.check_output([__sph2pipe__, '-f', 'wav', path])
+        wavbytes = subprocess.check_output([_sph2pipe, '-f', 'wav', path])
         x, xsr = sf.read(io.BytesIO(wavbytes), start=start, stop=stop)
 
     if force_mono and (len(x.shape) > 1):

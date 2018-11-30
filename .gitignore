@@ -1,6 +1,10 @@
 # Editor metadata
 .vscode/
 
+# sph2pipe
+tools/sph2pipe/sph2pipe
+tools/sph2pipe/sph2pipe.exe
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
