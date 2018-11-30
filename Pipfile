@@ -1,0 +1,18 @@
+[[source]]
+name = "pypi"
+url = "https://pypi.org/simple"
+verify_ssl = true
+
+[dev-packages]
+pytest = "*"
+
+[packages]
+click = "*"
+numpy = "*"
+soundfile = "*"
+scipy = "*"
+resampy = "*"
+matplotlib = "*"
+
+[requires]
+python_version = "3.6"
