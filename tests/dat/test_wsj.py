@@ -1,9 +1,11 @@
+import os
+
+import audlib
 from audlib.data.wsj import WSJ0
 from audlib.asr.util import PhonemeMap, CharacterMap
 from pprint import pprint
 
-pmap = PhonemeMap('/home/xyy/onhold/tutorial/wsj0/etc/cmudict.0.6d',
-                  phonepath='/home/xyy/onhold/tutorial/wsj0/etc/wsj0.phone')
+pmap = PhonemeMap(os.path.dirname(audlib.__file__)+"/misc/cmudict-0.7b")
 print("Dictionary contains [{}] valid words.".format(len(pmap.dict)))
 print("[{}] valid phonemes.".format(len(pmap.phonedict)))
 pprint(pmap.phonedict)
