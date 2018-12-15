@@ -31,8 +31,9 @@ def magresp(freq, resp, ax, units=('rad', 'db')):
         ax.set_ylabel('Amplitude [dB]', color='b')
         ax.set_ylim(-40, max(10, np.max(mag)))
     else:
-        ax.plot(freq, np.abs(resp), 'b')
+        ax.plot(freq, mag, 'b')
         ax.set_ylabel('Amplitude', color='b')
+        ax.set_ylim(0, 1.25*np.max(mag))
     if fu == 'rad':
         ax.set_xlabel(r'Normalized Frequency [$\times \pi$ rad/sample]')
     else:

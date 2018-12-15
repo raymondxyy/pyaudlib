@@ -44,13 +44,13 @@ class RATS_SAD(Dataset):
             └── sad
     """
 
-    def __init__(self, indir, subset='dev-1', channel='AH', select=None,
+    def __init__(self, root, subset='dev-1', channel='AH', select=None,
                  transform=None):
         """Create a dataset from `channel` and takes specified transform.
 
         Arguments
         ---------
-        indir: str
+        root: str
             Root directory of the RATS_SAD dataset.
         subset: str
             One of dev-1, dev-2, or train.
@@ -72,14 +72,14 @@ class RATS_SAD(Dataset):
         Since M could vary, a custom `collate_fn` is needed to patch examples
         in this dataset into dataloader.
         """
-        self.indir = indir
+        self.root = root
         self.subset = subset
         if subset not in ('dev-1', 'dev-2', 'train'):
             raise ValueError("Error: Must be one of dev-1/dev-2/train")
-        noisydir = os.path.join(indir, 'data',
+        noisydir = os.path.join(root, 'data',
                                 'aligned-{}'.format(subset), 'audio')
-        cleandir = os.path.join(indir, 'data', subset, 'audio/src')
-        vaddir = os.path.join(self.indir, 'data', subset, 'sad/src')
+        cleandir = os.path.join(root, 'data', subset, 'audio/src')
+        vaddir = os.path.join(self.root, 'data', subset, 'sad/src')
         assert os.path.exists(noisydir), \
             "Noisy directory does not exist!".format(noisydir)
         assert os.path.exists(cleandir), \
@@ -101,6 +101,7 @@ class RATS_SAD(Dataset):
         self.transform = transform
 
     def __len__(self):
+        """Return number of audio files to be processed."""
         return len(self.flist)
 
     def __getitem__(self, idx):
@@ -153,9 +154,9 @@ def tabread(tabpath):
 
 
 def test_RATS_SAD():
-    indir = '/home/xyy/data/RATS_SAD'  # change to your directory
+    root = '/home/xyy/data/RATS_SAD'  # change to your directory
 
-    dataset = RATS_SAD(indir, channel='AH')
+    dataset = RATS_SAD(root, channel='AH')
     print("RATS_SAD set samples: [{}]".format(len(dataset)))
     for sr, noisy, clean, vad in dataset:
         pass

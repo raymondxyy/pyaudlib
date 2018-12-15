@@ -3,7 +3,7 @@
 This is a direct copy of PyTorch's dataset class:
 https://pytorch.org/docs/stable/_modules/torch/utils/data/dataset.html#Dataset
 
-with some ommisions and additions.
+with some omissions and additions.
 """
 
 import bisect
@@ -19,34 +19,99 @@ class Dataset(object):
     supporting integer indexing in range from 0 to len(self) exclusive.
     """
 
+    @property
+    def flist(self):
+        """Hold a list of absolute File paths.
+
+        Alternatively, each member could be elements that allow the absolute
+        file path to be composed. Each path should exist and point to a valid
+        audio file.
+        """
+        raise NotImplementedError
+
     def __getitem__(self, index):
+        """Return one sample at current index.
+
+        For a generic dataset, a sample should be defined as:
+        {
+            'sr': sampling rate in int
+            'data': audio waveform in numpy.ndarray
+        }
+        """
         raise NotImplementedError
 
     def __len__(self):
-        raise NotImplementedError
+        """Give the number of files available to be processed."""
+        return len(self.flist)
 
     def __add__(self, other):
+        """Merge two datasets."""
         return ConcatDataset([self, other])
 
-    def validate_path(self, path):
+    @staticmethod
+    def exists(path):
         """Assert the existence of a path at `path`."""
         assert os.path.exists(path), "[{}] does not exist!".format(path)
 
 
-class SpeechRecDataset(Dataset):
-    """An abstract class subclassing ``Dataset`` for speech recognition.
+class ASRDataset(Dataset):
+    """An abstract class for automatic speech recognition.
 
-    All speech recognition datasets should subclass it. A few functions common
-    to all speech recognition tasks are provided:
-        load_phoneset
-        load_fillerset
-        load_dictionary
+    All speech recognition datasets should subclass it.
     """
+
+    @property
+    def vlist(self):
+        """Hold a LIST of Valid file paths.
+
+        Each path should fulfill the following requirements:
+            - exists in `self.flist`
+            - has a transcript available in `self.tdict`
+            - its transcript has transcribable words (i.e., label is available)
+        """
+        raise NotImplementedError
+
+    @property
+    def tdict(self):
+        """Hold a DICTionary of Transcripts.
+
+        The exact data structure of the dictionary could vary, but it should
+        be able to get to the transcript provided an entry in `self.vlist`.
+        """
+        raise NotImplementedError
+
+    def __init__(self, dataset, transmap):
+        """Instantiate a ASR dataset.
+
+        `dataset` should have the following properties:
+            - `root` for root directory
+            - `flist` for list of valid audio files
+        """
+        super(ASRDataset, self).__init__()
+        self.root = dataset.root
+        self.tmap = transmap
+
+    def __len__(self):
+        """Return number of valid files with valid transcript."""
+        return len(self.vlist)
+
+    def __getitem__(self, index):
+        """Return one sample at current index.
+
+        For a speech recognition dataset, a sample should be defined as:
+        {
+            'sr': sampling rate in int
+            'data': audio waveform in numpy.ndarray
+            'trans': transcript in str
+            'label': label sequence in array of int
+        }
+        """
+        raise NotImplementedError
 
 
 class ConcatDataset(Dataset):
-    """
-    Dataset to concatenate multiple datasets.
+    """Dataset to concatenate multiple datasets.
+
     Purpose: useful to assemble different existing datasets, possibly
     large-scale datasets as the concatenation operation is done in an
     on-the-fly manner.

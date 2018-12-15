@@ -10,7 +10,6 @@
 import numpy as np
 from numpy.fft import rfft, fft
 from scipy.fftpack import dct
-from scipy import signal
 
 from .auditory import hz2mel, mel2hz
 
@@ -48,7 +47,7 @@ class LinFreq(Filterbank):
     This class is implemented using the STFT bandpass filter view.
     """
 
-    def __init__(self, wind, dsamp=True):
+    def __init__(self, wind, nchan=None):
         """Create a bank of bandpass filters using prototype lowpass window.
 
         Parameters
@@ -57,8 +56,9 @@ class LinFreq(Filterbank):
             A window function.
 
         """
-        self.nchan = len(wind)  # at least N channels for N-point window
+        self.nchan = (nchan if nchan is not None else len(wind))
         self.wind = wind
+        self.nsym = (len(wind)-1) / 2.  # window point of symmetry
         self.filts = np.zeros((self.nchan, len(wind)), dtype=np.complex_)
         for k in range(self.nchan):  # make bandpass filters
             wk = 2*np.pi*k / self.nchan
@@ -75,16 +75,16 @@ class LinFreq(Filterbank):
     def freqz(self, k, nfft=None):
         """Return frequency response of k-th channel filter."""
         if nfft is None:
-            nfft = max(1024, int(2**np.ceil(np.log2(self.nchan)))
+            nfft = max(1024, int(2**np.ceil(np.log2(len(self.wind))))
                        )  # at least show 1024 frequency points
-        ww = np.linspace(0, 2, num=nfft, endpoint=False)
+        ww = 2*np.pi * np.arange(nfft)/nfft
         hh = fft(self.filts[k], n=nfft)
         return ww, hh
 
     def filter(self, sig, k):
         """Filter signal by k-th filter."""
         demod = np.exp(-1j*(2*np.pi*k/self.nchan)*np.arange(len(sig)))
-        return signal.fftconvolve(sig, self.filts[k], 'same') * demod
+        return np.convolve(sig, self.filts[k])[:len(sig)] * demod
 
 
 class MelFreq(Filterbank):
