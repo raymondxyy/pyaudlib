@@ -1,7 +1,4 @@
-# Some functions to deal with I/O of different audio file formats
-#
-# Change Log:
-#   * 2018/1/1: Clean up naming to be consistent with other files.
+"""Some functions to deal with I/O of different audio file formats."""
 
 import soundfile as sf
 from resampy import resample
@@ -18,15 +15,21 @@ assert os.path.exists(_sph2pipe)
 
 def audioread(path, sr=None, start=0, stop=None, force_mono=False,
               norm=False, verbose=False):
-    """
-    audioread: Read audio from path and return an numpy array.
-    Args:
-        path - path to audio on disk.
-        [sr] - If None, do nothing after reading audio. If not None and
-               different from sr of the file, resample using Secret Rabbit
-               Code's resampling utility.
-        [force_mono] - give True to force mono output.
-        [verbose]    - enable verbose.
+    """Read audio from path and return an numpy array.
+
+    Parameters
+    ----------
+    path: str
+        path to audio on disk.
+    sr: int, optional
+        Sampling rate. Default to None.
+        If None, do nothing after reading audio.
+        If not None and different from sr of the file, resample to new sr.
+    force_mono: bool
+        Set to True to force mono output.
+    verbose: bool
+        Enable verbose.
+
     """
     path = os.path.abspath(path)
     if not os.path.exists(path):
@@ -50,25 +53,33 @@ def audioread(path, sr=None, start=0, stop=None, force_mono=False,
         return x, xsr
 
 
-def audiowrite(data, sr, outdir, normalize=True, verbose=False):
-    """
-    audiowrite: Write a numpy array into an audio file.
-    Args:
-        data   - audio as a numpy array.
-        sr     - output sampling rate.
-        outdir - file path to the output on disk. Directory does not need to
-                 exist.
-        [normalize] - normalize amplitude by scaling so that maximum absolute
-                      amplitude is 1.
-        [verbose]   - enable verbose.
+def audiowrite(data, sr, outpath, norm=True, verbose=False):
+    """Write a numpy array into an audio file.
+
+    Parameters
+    ----------
+    data: array_like
+        Audio waveform.
+    sr: int
+        Output sampling rate.
+    outpath: str
+        File path to the output on disk. Directory does not need to exist.
+    norm: bool, optional
+        Normalize amplitude by scaling so that maximum absolute amplitude is 1.
+        Default to true.
+    verbose: bool, optional
+        Print to console. Default to false.
+
     """
     absmax = np.max(np.abs(data))  # in case all entries are 0s
-    if normalize and (absmax != 0):
+    if norm and (absmax != 0):
         data /= absmax
-    outpath = os.path.abspath(outdir)
-    if not os.path.exists(os.path.dirname(outpath)):
-        os.makedirs(os.path.dirname(outdir))
+    outpath = os.path.abspath(outpath)
+    outdir = os.path.dirname(outpath)
+    if not os.path.exists(outdir):
+        os.makedirs(outdir)
     if verbose:
         print("Writing to {}".format(outpath))
     sf.write(outpath, data, sr)
+
     return

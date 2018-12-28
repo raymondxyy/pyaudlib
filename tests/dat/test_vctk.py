@@ -1,30 +1,23 @@
-"""Test suites for VCTK.
+"""Test suites for VCTK."""
 
-# TODO:
-    - [ ] VCTK2chan
-        - [x] training set size 10368
-        - [x] validation set size 2592
-        - [x] testing set size 5184
-"""
-
-from audlib.data.vctk import VCTK2chan
+from audlib.data.vctk import SEVCTK2chan, SEVCTKNoRev
 
 
 def test_VCTK2chan():
-    indir = '/home/xyy/data/VCTKsmall'  # change to your directory accordingly
+    root = '/home/xyy/data/VCTKsmall'  # change to your directory accordingly
 
     def _testset():
-        db = VCTK2chan(indir, mode='test', testdir='*')
+        db = SEVCTK2chan(root, mode='test', testdir='*')
         print("Entire test set samples: [{}]".format(len(db)))
         return len(db) == 5184
 
     def _trainset():
-        db = VCTK2chan(indir, mode='train')
+        db = SEVCTK2chan(root, mode='train')
         print("Training set samples: [{}]".format(len(db)))
         return len(db) == 10368
 
     def _validset():
-        db = VCTK2chan(indir, mode='valid')
+        db = SEVCTK2chan(root, mode='valid')
         print("Validation set samples: [{}]".format(len(db)))
         return len(db) == 2592
 
@@ -33,5 +26,29 @@ def test_VCTK2chan():
     assert _testset()
 
 
+def test_VCTKNoRev():
+    root = '/home/xyy/data/VCTK'  # change to your directory accordingly
+
+    def _testset():
+        db_test = SEVCTKNoRev(root, mode='test', testdir='*')
+        print("Entire test set samples: [{}]".format(len(db_test)))
+        return len(db_test) == 44526
+
+    def _trainset():
+        db_train = SEVCTKNoRev(root, mode='train')
+        print("Training set samples: [{}]".format(len(db_train)))
+        return len(db_train) == 29467
+
+    def _validset():
+        db_valid = SEVCTKNoRev(root, mode='valid')
+        print("Validation set samples: [{}]".format(len(db_valid)))
+        return len(db_valid) == 6959
+
+    assert _testset()
+    assert _trainset()
+    assert _validset()
+
+
 if __name__ == '__main__':
     test_VCTK2chan()
+    test_VCTKNoRev()

@@ -43,6 +43,18 @@ def magresp(freq, resp, ax, units=('rad', 'db')):
 
 
 def phsresp(freq, resp, ax):
+    """Plot phase response from the complex frequency response.
+
+    Parameters
+    ----------
+    freq: array_like
+        Discrete frequency points
+    resp: array_like
+        Complex frequency response
+    ax: matplotlib.Axes object
+        axis to be plotted on
+
+    """
     ax.plot(freq, np.angle(resp)/np.pi, 'g')
     ax.set_ylabel(r'Angle ($\times \pi$ radians)', color='g')
     ax.set_xlabel(r'Normalized Frequency [$\times \pi$ rad/sample]')
@@ -69,8 +81,8 @@ def cepline(qindex, cepstrum, ax, sr=None):
 def plot_cep(qindex, cepstrum, sr=None, show=True, save=None):
     """Plot a cepstrum function in a figure.
 
-    Arguments
-    ---------
+    Parameters
+    ----------
     qindex: int array
         Quefrency integer index in an array.
     cepstrum: float array
@@ -82,6 +94,7 @@ def plot_cep(qindex, cepstrum, sr=None, show=True, save=None):
         Show the figure?
     save: string [None]
         Save figure to file if exists.
+
     """
     fig, ax = plt.subplots()
     cepline(qindex, cepstrum, ax, sr=sr)
@@ -91,19 +104,29 @@ def plot_cep(qindex, cepstrum, sr=None, show=True, save=None):
         fig.savefig(save)
 
 
-def specgram(s, spec_xscale='linear', spec_yscale='linear'):
+def specgram(stft, ax, time_axis=None, freq_axis=None):
+    """Plot the magnitude spectrogram.
+
+    Parameters
+    ----------
+    stft: array_like
+        Complex short-time Fourier transform
+    ax: matplotlib.Axes
+        Axis on which the spectrogram is plotted
+    time_axis: array_like, optional
+        Must have same dimension as `stft.shape[0]`.
+        Default will plot on sample scale.
+    freq_axis: array_like, optional
+        Must have same dimension as `stft.shape[1]`.
+        Default will plot on number of channels.
+
     """
-    Plot specrogram given the spectrogram object.
-    Args: s  - spectrogram object (t,f,m)
-    """
-    t, f, m = s
-    fig = plt.figure()
-    plt.pcolormesh(t, f, m.T, cmap='jet')
-    #plt.pcolormesh(20*np.log10(m+eps),cmap='jet')
-    plt.xscale(spec_xscale)
-    plt.yscale(spec_yscale)
-    plt.colorbar()
-    plt.axis('tight')
-    plt.xlabel("time (s)")
-    plt.ylabel("frequency (hz)")
-    plt.show()
+    if time_axis is None:
+        time_axis = np.arange(stft.shape[0])
+    if freq_axis is None:
+        freq_axis = np.arange(stft.shape[1])
+
+    spec = ax.pcolormesh(time_axis, freq_axis, np.abs(stft.T), cmap='jet')
+    plt.colorbar(spec, ax=ax)
+
+    return

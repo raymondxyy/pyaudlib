@@ -1,6 +1,15 @@
-"""The Wall Street Journal Speech Recognition Datasets.
+"""The Wall Street Journal Datasets.
 
-Contain both the pilot wsj0 and full wsj1.
+This module contains both the pilot wsj0 and full wsj1 datasets.
+You MUST have the data on disk in order to use it.
+
+Supported dataset formats:
+    WSJ0 - generic WSJ0; offering audio samples
+    ASRWSJ0 - WSJ0 for automatic speech recognition;
+              offering audio samples, transcripts, labels
+    WSJ1 - generic WSJ1; offering audio samples
+    ASRWSJ1 - WSJ1 for automatic speech recognition;
+              offering audio samples, transcripts, labels
 """
 import glob
 import os
@@ -9,7 +18,7 @@ from .dataset import Dataset, ASRDataset
 from ..io.audio import audioread
 
 
-def dot2tdict(dotpath):
+def dot2transcripts(dotpath):
     """Convert a .dot file to a dictionary of transcriptions.
 
     Parameters
@@ -19,22 +28,22 @@ def dot2tdict(dotpath):
 
     Returns
     -------
-    tdict: dict of str
-        tdict[condition][speaker ID][utterance ID] = transcription
+    transcripts: dict of str
+        transcripts[condition][speaker ID][utterance ID] = transcript
 
     """
-    tdict = {}
+    transcripts = {}
     with open(dotpath) as fp:
         for line in fp.readlines():
             line = line.strip().split()
             # Template
             # <transcription> <(utterance id)>
             trans, uid = ' '.join(line[:-1]), line[-1][1:-1]
-            tdict[uid] = trans.upper()
-    return tdict
+            transcripts[uid] = trans.upper()
+    return transcripts
 
 
-def idx2flist(idxpath, root, train=True):
+def idx2paths(idxpath, root, train=True):
     """Convert a WSJ-style .idx file to a list of data paths.
 
     Parameters
@@ -90,7 +99,7 @@ def idx2flist(idxpath, root, train=True):
 
 
 class WSJ(Dataset):
-    """Instantiate a dataset from the WSJ0 dataset.
+    """Generic dataset framework for WSJ0 and WSJ1.
 
     Parameters
     ----------
@@ -128,15 +137,15 @@ class WSJ(Dataset):
         self.eiregex = NotImplementedError
 
     @property
-    def flist(self):
+    def all_files(self):
         """Build valid file list."""
         out = []  # holds all valid data paths
         if self.train:
             for idxpath in glob.iglob(self.tiregex):
-                out.extend(idx2flist(idxpath, self.root))
+                out.extend(idx2paths(idxpath, self.root))
         else:
             for idxpath in glob.iglob(self.eiregex):
-                out.extend(idx2flist(idxpath, self.root, train=False))
+                out.extend(idx2paths(idxpath, self.root, train=False))
         return list(filter(self.filt, out))
 
     def __str__(self):
@@ -144,8 +153,10 @@ class WSJ(Dataset):
         report = """
             +++++ Summary for [{}][{} partition] +++++
             Total [{}] valid files to be processed.
-        """.format(self.__class__.__name__, 'Train' if self.train else 'Test',
-                   len(self.flist))
+        """.format(self.__class__.__name__,
+                   'Train' if self.train else 'Test',
+                   len(self.all_files))
+
         return report
 
     def __repr__(self):
@@ -156,11 +167,11 @@ class WSJ(Dataset):
 
     def __len__(self):
         """Return number of audio files to be processed."""
-        return len(self.flist)
+        return len(self.all_files)
 
     def __getitem__(self, idx):
-        """Retrieve the i-th example from the dataset."""
-        fpath = os.path.join(self.root, self.flist[idx])
+        """Get the idx-th example from the dataset."""
+        fpath = os.path.join(self.root, self.all_files[idx])
 
         data, sr = audioread(fpath)
         sample = {
@@ -175,9 +186,10 @@ class WSJ(Dataset):
 
 
 class WSJ0(WSJ):
-    """Instantiate WSJ0."""
+    """Generic WSJ0 framework."""
 
     def __init__(self, root, train=True, filt=None, transform=None):
+        """Instantiate generic WSJ0."""
         super(WSJ0, self).__init__(root, train, filt, transform)
         # Validate directories of file indices and transcriptions
         self.tiregex = os.path.join(
@@ -187,9 +199,10 @@ class WSJ0(WSJ):
 
 
 class WSJ1(WSJ):
-    """Instantiate WSJ1."""
+    """Generic WSJ1 framework."""
 
     def __init__(self, root, train=True, filt=None, transform=None):
+        """Instantiate generic WSJ1."""
         super(WSJ1, self).__init__(root, train, filt, transform)
         # Validate directories of file indices and transcriptions
         self.tiregex = os.path.join(
@@ -198,10 +211,10 @@ class WSJ1(WSJ):
 
 
 class ASRWSJ(ASRDataset):
-    """docstring for WSJ0."""
+    """ASR framework for WSJ0 and WSJ1."""
 
     def __init__(self, dataset, transmap):
-        """Instantiate a dataset from the WSJ0 dataset.
+        """Instantiate a WSJ dataset for speech recognition.
 
         Parameters
         ----------
@@ -238,14 +251,14 @@ class ASRWSJ(ASRDataset):
         super(ASRWSJ, self).__init__(dataset, transmap)
         self.root = dataset.root
         self.dataset = dataset
-        self.tmap = transmap
+        self.transmap = transmap
 
         # Validate directories of file transcriptions
         self.tdregex = NotImplementedError
         self.edregex = NotImplementedError
 
     @property
-    def tdict(self):
+    def transcripts(self):
         """Build transcript dictionary."""
         # Store all transcriptions in a dictionary
         # From a file path, retrieve its transcript with
@@ -258,7 +271,7 @@ class ASRWSJ(ASRDataset):
                     out[cond] = {}
                 if sid not in out[cond]:
                     out[cond][sid] = {}
-                out[cond][sid].update(dot2tdict(dotpath))
+                out[cond][sid].update(dot2transcripts(dotpath))
         else:
             for dotpath in glob.iglob(self.edregex):
                 cond, sid = dotpath.split('/')[-3:-1]
@@ -266,28 +279,28 @@ class ASRWSJ(ASRDataset):
                     out[cond] = {}
                 if sid not in out[cond]:
                     out[cond][sid] = {}
-                out[cond][sid].update(dot2tdict(dotpath))
+                out[cond][sid].update(dot2transcripts(dotpath))
         return out
 
     @property
-    def vlist(self):
+    def valid_files(self):
         """Prepare valid file list."""
         out = []  # holds valid file path indices
         self.oovs = {}  # holds out-of-vocab words
-        for ii, fpath in enumerate(self.dataset.flist):
+        for ii, fpath in enumerate(self.dataset.all_files):
             fpath = os.path.join(self.root, fpath)
             if os.path.exists(fpath):
                 cond, sid, uid = fpath.split('/')[-3:]
                 uid = uid.split('.')[0]
                 try:
-                    trans = self.tdict[cond][sid][uid]
+                    trans = self.transcripts[cond][sid][uid]
                 except KeyError:  # no transcript
                     continue
                 else:
-                    if self.tmap.transcribable(trans):
+                    if self.transmap.transcribable(trans):
                         out.append(ii)
                     else:
-                        oov = self.tmap.trans2oov(trans)
+                        oov = self.transmap.trans2oov(trans)
                         for w in oov:
                             if w in self.oovs:
                                 self.oovs[w] += oov[w]
@@ -305,32 +318,34 @@ class ASRWSJ(ASRDataset):
             \t Some examples: [{}]
         """.format(self.__class__.__name__,
                    'Train' if self.dataset.train else 'Test',
-                   len(self.dataset.flist), len(self.vlist), len(self.oovs),
+                   len(self.dataset.all_files), len(
+                       self.valid_files), len(self.oovs),
                    ", ".join([e for e in self.oovs][:min(5, len(self.oovs))]))
         return report
 
     def __repr__(self):
         """Representation of WSJ0."""
         return r"""{}({}, {}, train={}, filt={}, transform={})
-        """.format(self.__class__.__name__, self.root, self.tmap,
+        """.format(self.__class__.__name__, self.root, self.transmap,
                    self.dataset.train, self.dataset.filt,
                    self.dataset.transform)
 
     def __len__(self):
         """Return number of audio files to be processed."""
-        return len(self.vlist)
+        return len(self.valid_files)
 
     def __getitem__(self, idx):
         """Retrieve the i-th example from the dataset."""
-        fpath = os.path.join(self.root, self.dataset.flist[self.vlist[idx]])
+        fpath = os.path.join(
+            self.root, self.dataset.all_files[self.valid_files[idx]])
 
         # Find corresponding transcript
         cond, sid, uid = fpath.split('/')[-3:]
         uid = uid.split('.')[0]
-        trans = self.tdict[cond][sid][uid]
+        trans = self.transcripts[cond][sid][uid]
 
         # Convert transcript to label sequence
-        label = self.tmap.trans2label(trans)
+        label = self.transmap.trans2label(trans)
 
         data, sr = audioread(fpath)
         sample = {
@@ -350,6 +365,7 @@ class ASRWSJ0(ASRWSJ):
     """ASR dataset for WSJ0."""
 
     def __init__(self, dataset, transmap):
+        """Instantiate WSJ0 for automatic speech recognition."""
         super(ASRWSJ0, self).__init__(dataset, transmap)
         self.tdregex = os.path.join(
             self.root, "11-4.1/wsj0/transcrp/dots/*/*/*.dot")
@@ -360,6 +376,7 @@ class ASRWSJ1(ASRWSJ):
     """ASR dataset for WSJ1."""
 
     def __init__(self, dataset, transmap):
+        """Instantiate WSJ1 for automatic speech recognition."""
         super(ASRWSJ1, self).__init__(dataset, transmap)
         self.tdregex = os.path.join(
             self.root, "13-34.1/wsj1/trans/wsj1/si_tr_*/*/*.dot")

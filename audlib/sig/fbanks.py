@@ -108,9 +108,6 @@ class MelFreq(Filterbank):
             Higest center-frequency in filterbank. Could either by in terms of
             Hz or 2*pi. Default to .5 (Nyquist).
 
-        Returns
-        -------
-
         """
         self.nfft = nfft
         self.nchan = nchan

@@ -7,15 +7,26 @@ from .util import nextpow2, firfreqz
 def hamming(wsize, hop=None, nchan=None, synth=False):
     """Make a hamming window for overlap add analysis and synthesis.
 
-    The end points of the traditional hamming window are fixed to produce COLA
-    window. If you want the original hamming window, use `numpy.hamming`.
+    When `synth` is enabled, the constant overlap-add (COLA) constraint will
+    be checked according to FT view (set `hop`) or BPF view (set `nchan`).
+    In summary,
+    1. Set `synth` if you need perfect synthesis: istft(stft(x)) == x.
+    2. Do not set `synth` if you only care about analysis.
+    3. Set `hop` if you need COLA in time to unity.
+    4. Set `nchan` if you need COLA in frequency to unity.
 
     Parameters
     ----------
-    wsize : int
+    wsize: int
         Window length in samples.
-    hop : {None, float}, optional
-        Hop fraction in range (0, 1). If unspecified, do not normalize window.
+    hop: float, optional
+        Hop fraction in range (0, 1) in FT view.
+        Default to None, in which case window is not normalized.
+    nchan: int, optional
+        Number of frequency channels in BPF view.
+        Default to None, in which case window is not normalized.
+    synth: bool
+        Set if perfect reconstruction is intended.
 
     Returns
     -------
@@ -32,7 +43,7 @@ def hamming(wsize, hop=None, nchan=None, synth=False):
     normalize : Normalize window amplitude for unity overlap-add.
 
     """
-    if synth and (hop is not None):  # for perfect OLA reconstruction
+    if synth and (hop is not None):  # for perfect OLA reconstruction in time
         if wsize % 2:  # fix endpoint problem for odd-size window
             wind = np.hamming(wsize)
             wind[0] /= 2.
@@ -43,9 +54,12 @@ def hamming(wsize, hop=None, nchan=None, synth=False):
     else:
         wind = np.hamming(wsize)
     if hop is not None:
-        tnorm(wind, hop)
+        assert tnorm(wind, hop),\
+            "Parameters do not satisfy COLA in time.".format(wsize, hop)
     elif nchan is not None:
-        fnorm(wind, nchan)
+        assert fnorm(wind, nchan),\
+            "Parameters do not satisfy COLA in frequency.".format(wsize, nchan)
+
     return wind
 
 
@@ -97,15 +111,14 @@ def tnorm(wind, hop):
 
     See Also
     --------
-    cola : check COLA constraint.
-    """
+    tcola : check COLA constraint in time.
 
+    """
     amp = tcola(wind, hop)
     if amp is not None:
         wind /= amp
         return True
     else:
-        print("WARNING: wind, hop does not conform to COLA.")
         return False
 
 
@@ -127,20 +140,19 @@ def fnorm(wind, nchan):
 
     See Also
     --------
-    cola : check COLA constraint.
-    """
+    fcola : check COLA constraint in frequency.
 
+    """
     amp = fcola(wind, nchan)
     if amp is not None:
         wind /= amp
         return True
     else:
-        print("WARNING: wind, hop does not conform to COLA.")
         return False
 
 
 def tcola(wind, hop):
-    """Check the constant overlap-add (COLA) constraint.
+    """Check the constant overlap-add (COLA) constraint in time.
 
     Parameters
     ----------
@@ -153,6 +165,7 @@ def tcola(wind, hop):
     -------
     amp : float (or None)
         A normalization factor if COLA is satisfied, otherwise None.
+
     """
     wsize = len(wind)
     hsize = hop2hsize(wind, hop)
@@ -176,7 +189,7 @@ def fcola(wind, nchan):
     Parameters
     ----------
     wind: array_like
-        A ``(N,) ndarray`` window function.
+        A `(N,) ndarray` window function.
     nchan: int
         Number of linearly spaced frequency channels in range [0, 2pi).
 
@@ -184,6 +197,7 @@ def fcola(wind, nchan):
     -------
     amp : float (or None)
         A normalization factor if COLA is satisfied, otherwise None.
+
     """
     nfft = max(nextpow2(len(wind)), 1024)
     resp = np.zeros(nfft, dtype=np.complex_)
