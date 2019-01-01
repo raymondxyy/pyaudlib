@@ -104,13 +104,15 @@ def plot_cep(qindex, cepstrum, sr=None, show=True, save=None):
         fig.savefig(save)
 
 
-def specgram(stft, ax, time_axis=None, freq_axis=None):
-    """Plot the magnitude spectrogram.
+def specgram(sig, ax, time_axis=None, freq_axis=None):
+    """Plot a 2-D representation as a spectrogram.
+
+    Warning: `sig` must be in the final numeric form (no complex numbers).
 
     Parameters
     ----------
-    stft: array_like
-        Complex short-time Fourier transform
+    sig: array_like
+        2-D signal to bee plotted as a spectrogram
     ax: matplotlib.Axes
         Axis on which the spectrogram is plotted
     time_axis: array_like, optional
@@ -122,11 +124,11 @@ def specgram(stft, ax, time_axis=None, freq_axis=None):
 
     """
     if time_axis is None:
-        time_axis = np.arange(stft.shape[0])
+        time_axis = np.arange(sig.shape[0])
     if freq_axis is None:
-        freq_axis = np.arange(stft.shape[1])
+        freq_axis = np.arange(sig.shape[1])
 
-    spec = ax.pcolormesh(time_axis, freq_axis, np.abs(stft.T), cmap='jet')
+    spec = ax.pcolormesh(time_axis, freq_axis, sig.T, cmap='jet')
     plt.colorbar(spec, ax=ax)
 
     return

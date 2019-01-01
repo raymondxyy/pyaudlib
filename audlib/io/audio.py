@@ -13,6 +13,69 @@ _sph2pipe = os.path.dirname(__file__)+'/../../tools/sph2pipe/sph2pipe'
 assert os.path.exists(_sph2pipe)
 
 
+def sphereinfo(path):
+    """Read metadata of a embedded-shorten sphere file.
+
+    A sphere header looks like the following:
+    NIST_1A
+       1024
+    sample_count -i 143421600
+    sample_n_bytes -i 2
+    channel_count -i 2
+    sample_byte_format -s2 01
+    sample_rate -i 16000
+    sample_coding -s26 pcm,embedded-shorten-v2.00
+    sample_checksum -i 24616
+    end_head
+    """
+    info = {}
+    with open(path, 'rb') as fp:
+        for line in fp:
+            if line.strip() == b'1024':
+                break
+
+        for line in fp:
+            if line.strip() == b'end_head':
+                break
+            field, flag, val = line.strip().decode().split()
+            info[field] = int(val) if flag == '-i' else val
+
+    return info
+
+
+class SphereInfo(object):
+    """soundfile.info interface for embedded-shorten."""
+
+    def __init__(self, path):
+        """Read metadata of a sphere file."""
+        super(SphereInfo, self).__init__()
+
+        info = sphereinfo(path)
+        self.samplerate = info['sample_rate']
+        self.frames = info['sample_count']
+
+
+def audioinfo(path):
+    """Read metadata of an audio file.
+
+    A wrapper of soundfile.info plus a class for embedded-shorten files.
+    Parameters
+    ----------
+    path: str
+        Full path to audio file.
+
+    Returns
+    -------
+    info: class
+        A soundfile.info class of available metadata.
+
+    """
+    try:
+        return sf.info(path)
+    except RuntimeError:
+        return SphereInfo(path)
+
+
 def audioread(path, sr=None, start=0, stop=None, force_mono=False,
               norm=False, verbose=False):
     """Read audio from path and return an numpy array.

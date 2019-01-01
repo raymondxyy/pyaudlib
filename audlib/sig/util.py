@@ -3,6 +3,17 @@
 import numpy as np
 from numpy.fft import fft
 import numpy.random as rand
+from scipy.signal import lfilter
+
+
+def pre_emphasis(sig, alpha):
+    """First-order highpass filter signal."""
+    return lfilter([1, -alpha], 1, sig)
+
+
+def dither(sig, scale):
+    """Dither signal by adding small amount of noise to signal."""
+    return sig + np.random.randn(*sig.shape)*scale
 
 
 def firfreqz(h, nfft):

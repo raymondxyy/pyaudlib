@@ -1,6 +1,7 @@
 """Some utility functions for pre-processing audio dataset."""
 from random import randrange
-import soundfile as sf  # for retrieving audio length
+
+from ..io.audio import audioinfo
 
 
 def randsel(fpath, minlen=None, maxlen=None):
@@ -21,7 +22,7 @@ def randsel(fpath, minlen=None, maxlen=None):
         integer index of selection
 
     """
-    info = sf.info(fpath)
+    info = audioinfo(fpath)
     sr, sigsize = info.samplerate, info.frames
     if minlen is None:
         minoffset = 0

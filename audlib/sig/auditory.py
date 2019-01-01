@@ -14,6 +14,58 @@ import numpy as np
 from scipy import signal
 
 
+def dft2mel(nfft, sr=8000., nfilts=0, width=1., minfrq=0., maxfrq=4000.,
+            sphinx=False, constamp=True):
+    """Map linear discrete frequencies to Mel scale."""
+    if nfilts == 0:
+        nfilts = np.int(np.ceil(hz2mel(np.array([maxfrq]), sphinx)[0]/2))
+
+    weights = np.zeros((nfilts, nfft))
+
+    # dft index -> linear frequency in hz
+    dftfrqs = np.arange(nfft/2+1, dtype=np.float)/nfft * sr
+
+    maxmel, minmel = hz2mel(np.array([maxfrq, minfrq]), sphinx)
+    binfrqs = mel2hz(minmel+np.linspace(0., 1., nfilts+2)
+                     * (maxmel-minmel), sphinx)
+
+    for i in range(nfilts):
+        fs = binfrqs[i:i+3].copy()
+        fs = fs[1] + width*(fs-fs[1])  # adjust bandwidth if needed
+        loslope = (dftfrqs - fs[0])/(fs[1] - fs[0])
+        hislope = (fs[2] - dftfrqs)/(fs[2] - fs[1])
+        weights[i, 0:nfft/2+1] = np.maximum(0, np.minimum(loslope, hislope))
+
+    if constamp:
+        # Slaney-style mel is scaled to be approx constant E per channel
+        weights = np.diag(
+            2/(binfrqs[2:nfilts+2]-binfrqs[:nfilts])).dot(weights)
+    weights[:, nfft/2+1:] = 0  # avoid aliasing
+
+    return weights, binfrqs[1:]
+
+
+def hz2dft(freq, sr, nfft):
+    """Map frequency in Hz to discrete Fourier transform bins.
+
+    Parameters
+    ----------
+    freq: array_like
+        Frequency in hz
+    sr: int
+        Sampling rate in hz
+    nfft: int
+        Number of DFT bins in range [0, 2*pi)
+
+    Returns
+    -------
+    bins: array_like
+        Frequency bin numbers
+
+    """
+    return (freq/sr * nfft).astype('int')
+
+
 def hz2mel(f, sphinx=True):
     """Convert linear frequency to mel frequency scale."""
     if sphinx:
@@ -133,7 +185,7 @@ def erb_fbank(sig, fcoefs, band=None):
 def erb_filters(sr, num_chan, low_freq):
     """Construct ERB filterbanks."""
     T = 1./sr
-    if type(num_chan) == int:
+    if type(num_chan) is int:
         # make center frequencies in this case
         cf = erb_space(low_freq, int(sr/2), num_chan)
     else:
@@ -146,32 +198,33 @@ def erb_filters(sr, num_chan, low_freq):
     B1 = -2*np.cos(2*cf*np.pi*T) / np.exp(B*T)
     B2 = np.exp(-2*B*T)
 
-    A11 = -(2*T*np.cos(2*cf*np.pi*T)/np.exp(B*T) +
-            2*np.sqrt(3+2**1.5)*T*np.sin(2*cf*np.pi*T) / np.exp(B*T))/2
-    A12 = -(2*T*np.cos(2*cf*np.pi*T)/np.exp(B*T) -
-            2*np.sqrt(3+2**1.5)*T*np.sin(2*cf*np.pi*T) / np.exp(B*T))/2
-    A13 = -(2*T*np.cos(2*cf*np.pi*T)/np.exp(B*T) +
-            2*np.sqrt(3-2**1.5)*T*np.sin(2*cf*np.pi*T) / np.exp(B*T))/2
-    A14 = -(2*T*np.cos(2*cf*np.pi*T)/np.exp(B*T) -
-            2*np.sqrt(3-2**1.5)*T*np.sin(2*cf*np.pi*T) / np.exp(B*T))/2
+    A11 = -(2*T*np.cos(2*cf*np.pi*T)/np.exp(B*T)
+            + 2*np.sqrt(3+2**1.5)*T*np.sin(2*cf*np.pi*T) / np.exp(B*T))/2
+    A12 = -(2*T*np.cos(2*cf*np.pi*T)/np.exp(B*T)
+            - 2*np.sqrt(3+2**1.5)*T*np.sin(2*cf*np.pi*T) / np.exp(B*T))/2
+    A13 = -(2*T*np.cos(2*cf*np.pi*T)/np.exp(B*T)
+            + 2*np.sqrt(3-2**1.5)*T*np.sin(2*cf*np.pi*T) / np.exp(B*T))/2
+    A14 = -(2*T*np.cos(2*cf*np.pi*T)/np.exp(B*T)
+            - 2*np.sqrt(3-2**1.5)*T*np.sin(2*cf*np.pi*T) / np.exp(B*T))/2
 
     gain = np.abs(
-        (-2*np.exp(4*1j*cf*np.pi*T)*T +
-         2*np.exp(-(B*T) + 2*1j*cf*np.pi*T)*T *
-         (np.cos(2*cf*np.pi*T) - np.sqrt(3 - 2**(3./2)) *
-          np.sin(2*cf*np.pi*T))) *
-        (-2*np.exp(4*1j*cf*np.pi*T)*T +
-         2*np.exp(-(B*T) + 2*1j*cf*np.pi*T)*T *
-         (np.cos(2*cf*np.pi*T) + np.sqrt(3 - 2**(3./2)) *
-          np.sin(2*cf*np.pi*T))) *
-        (-2*np.exp(4*1j*cf*np.pi*T)*T +
-         2*np.exp(-(B*T) + 2*1j*cf*np.pi*T)*T *
-         (np.cos(2*cf*np.pi*T) -
-          np.sqrt(3 + 2**(3./2))*np.sin(2*cf*np.pi*T))) *
-        (-2*np.exp(4*1j*cf*np.pi*T)*T+2*np.exp(-(B*T)+2*1j*cf*np.pi*T)*T *
-         (np.cos(2*cf*np.pi*T) + np.sqrt(3+2**(3./2))*np.sin(2*cf*np.pi*T))) /
-        (-2 / np.exp(2*B*T) - 2*np.exp(4*1j*cf*np.pi*T) +
-         2*(1 + np.exp(4*1j*cf*np.pi*T))/np.exp(B*T))**4)
+        (-2*np.exp(4*1j*cf*np.pi*T)*T
+         + 2*np.exp(-(B*T) + 2*1j*cf*np.pi*T)*T
+         * (np.cos(2*cf*np.pi*T) - np.sqrt(3 - 2**(3./2))
+            * np.sin(2*cf*np.pi*T)))
+        * (-2*np.exp(4*1j*cf*np.pi*T)*T
+           + 2*np.exp(-(B*T) + 2*1j*cf*np.pi*T)*T
+           * (np.cos(2*cf*np.pi*T) + np.sqrt(3 - 2**(3./2))
+              * np.sin(2*cf*np.pi*T)))
+        * (-2*np.exp(4*1j*cf*np.pi*T)*T
+           + 2*np.exp(-(B*T) + 2*1j*cf*np.pi*T)*T
+           * (np.cos(2*cf*np.pi*T)
+              - np.sqrt(3 + 2**(3./2))*np.sin(2*cf*np.pi*T)))
+        * (-2*np.exp(4*1j*cf*np.pi*T)*T+2*np.exp(-(B*T)+2*1j*cf*np.pi*T)*T
+           * (np.cos(2*cf*np.pi*T)
+              + np.sqrt(3+2**(3./2))*np.sin(2*cf*np.pi*T)))
+        / (-2 / np.exp(2*B*T) - 2*np.exp(4*1j*cf*np.pi*T)
+           + 2*(1 + np.exp(4*1j*cf*np.pi*T))/np.exp(B*T))**4)
 
     allfilts = np.ones((len(cf)))
     return (A0*allfilts, A11, A12, A13, A14,

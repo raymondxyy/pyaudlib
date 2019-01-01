@@ -63,7 +63,7 @@ def hamming(wsize, hop=None, nchan=None, synth=False):
     return wind
 
 
-def rect(wsize, hop=None, nchan=False):
+def rect(wsize, hop=None, nchan=None):
     """Make a rectangular window.
 
     Parameters
