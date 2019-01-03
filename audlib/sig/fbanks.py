@@ -2,8 +2,8 @@
 
 #TODO:
     - [-] LinFreq: Linear-frequency filterbank (STFT filterbank view)
-    - [-] MelFreq: Mel-frequency filterbank
-    - [ ] Gammatone: Gammatone filterbank
+    - [x] MelFreq: Mel-frequency filterbank
+    - [-] Gammatone: Gammatone filterbank
 
 """
 
@@ -12,6 +12,7 @@ from numpy.fft import rfft, fft
 from scipy.fftpack import dct
 
 from .auditory import hz2mel, mel2hz
+from .auditory import erb_space, erb_filters, erb_fbank, erb_freqz
 
 
 class Filterbank(object):
@@ -199,3 +200,63 @@ class MelFreq(Filterbank):
     def mfcc(self, sig):
         """Return mel-frequency cepstral coefficients (MFCC)."""
         return dct(self.melspec(sig), norm='ortho')
+
+
+class Gammatone(Filterbank):
+    """The Gammatone filterbank."""
+
+    def __init__(self, sr, num_chan, center_frequencies=None):
+        """Instantiate a Gammatone filterbank.
+
+        Parameters
+        ----------
+        sr: int
+            Sampling rate.
+        num_chan: int
+            Number of frequency channels.
+        center_frequencies: iterable, optional
+            Center frequencies of each filter. There are 3 options:
+            1. (Default) None. This sets f_lower to 100Hz, f_upper to Nyquist
+            frequency, and assume equal spacing on linear frequency scale for
+            other frequencies.
+            2. Tuple of (`freqlower`, `frequpper`). This takes user-defined
+            lower and upper bounds, and assume equal spacing on linear scale
+            for other frequencies.
+            3. Iterable of center frequencies. This allows every center
+            frequency to be defined by user.
+
+        """
+        super(Gammatone, self).__init__()
+        self.sr = sr
+        self.num_chan = num_chan
+        if center_frequencies is None:
+            self.cf = erb_space(num_chan, 100., sr/2)
+        elif len(center_frequencies) == num_chan:
+            self.cf = center_frequencies
+        else:
+            assert len(center_frequencies) == 2,\
+                "Fail to interpret center frequencies!"
+            self.cf = erb_space(num_chan, *center_frequencies)
+
+        self.filters = []
+        for ii, cf in enumerate(self.cf):  # construct filter coefficients
+            A0, A11, A12, A13, A14, A2, B0, B1, B2, gain = erb_filters(sr, cf)
+            self.filters.append((A0, A11, A12, A13, A14, A2, B0, B1, B2, gain))
+
+    def __len__(self):
+        """Return number of channels."""
+        return self.num_chan
+
+    def __getitem__(self, k):
+        """Get filter coefficients of k-th channel."""
+        return self.filters[k]
+
+    def freqz(self, k, nfft=None):
+        """Compute k-th channel's frequency reponse."""
+        if nfft is None:
+            nfft = 1024
+        return erb_freqz(*self.filters[k], nfft)
+
+    def filter(self, sig, k):
+        """Filter signal with k-th channel."""
+        return erb_fbank(sig, *self.filters[k])

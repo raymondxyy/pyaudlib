@@ -1,21 +1,20 @@
-# Different implementations of Wiener filtering
-# Author: Raymond Xia (yangyanx@andrew.cmu.edu)
-
+"""Speech enhancement utilities."""
 # Change log:
 #   09/07/17:
 #       * Create this file
 #       * Added iterative Wiener filtering
 #   11/26/17:
 #       * Added A-Priori SNR estimation for Wiener filtering
-#
-from .sig.time_analysis import lpc
-#from analysis.transform import *
+#   01/01/19:
+#       * Cleaned up to conform to new interface
+
 import numpy as np
 from numpy.fft import rfft, irfft
-from .sig.window import hamming
-from .sig.stproc import stft, istft, stana, ola, stpsd
-from .util.cfg import cfgload
-from pdb import set_trace
+
+from .sig.stproc import stana, ola
+from .sig.temporal import lpc
+from .sig.transform import stft, istft, stpsd
+from .cfg import cfgload
 
 # Load in configurations first
 _cfg = cfgload()['enhance']
@@ -36,15 +35,31 @@ def __cfgshow__():
 def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):
     """Implement iterative Wiener filtering described by Lim and Oppenheim.
 
-    Code based on Loizou's matlab implementation.
+    Code based on Loizou's matlab implementation. See transform.stft for
+    complete explanation of parameters.
+
+    Parameters
+    ----------
+    noise: array_like
+        Noise signal as a ndarray.
+    iters: int
+        Number of iterations to do between spectra and LPCs.
+        Default to 3, as suggested in Loizou.
+
+    See Also
+    --------
+    transform.stft
+
     """
     # Form the constant complex exponential matrix here for efficiency
     _exp_mat = np.exp(-1j*(2*np.pi)/nfft*np.outer(np.arange(
                         _lpc_order+1), np.arange(nfft//2+1)))
+
     # Basically copy from stft code to prevent redundant processing
     fsize = len(wind)
     woff = (fsize-(fsize % 2)) // 2
     zp = np.zeros(nfft-fsize)  # zero padding
+
     # Estimate noise PSD first
     if noise is None:
         npsd = stpsd(x, sr, wind, hop, nfft, nframes=6)
@@ -52,8 +67,7 @@ def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):
         npsd = stpsd(noise, sr, wind, hop, nfft, nframes=-1)
 
     def wiener_iter_frame(frame):
-        """Wiener iterative filtering algorithm by frame."""
-        # get initial LPC estimate
+        """One frame of Wiener iterative filtering."""
         xlpc = lpc(frame, _lpc_order, _lpc_method)
         # Get initial PSD estimate
         if zphase:
@@ -64,9 +78,6 @@ def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):
         xpsd = np.abs(xspec)**2
 
         # Iterative process here
-        buff = np.empty_like(frame)  # will hold Wiener filtered signal s[n]
-        filt = np.empty_like(xpsd)  # will hold Wiener filter H(w)
-        spsd = np.empty_like(xpsd)  # will hold estimated speech PSD |S(w)|^2
         for ii in range(iters):  # iteration number influences spectral peaks
             # estimated psd of speech
             spsd = 1 / (np.abs(xlpc.dot(_exp_mat))**2)
@@ -83,14 +94,14 @@ def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):
 
     # Now perform frame-level Wiener filtering on x
     srec = []
-    for i, xframe in enumerate(stana(x, sr, wind, hop)):
+    for xframe in stana(x, sr, wind, hop):
         xclean, filt, spsd = wiener_iter_frame(xframe)
         srec.append(xclean)
 
     # Synthesis by overlap-add (OLA)
-    xout = ola(srec, sr, wind, hop)
+    xsynth = ola(srec, sr, wind, hop)
 
-    return xout
+    return xsynth
 
 
 def asnr(x, sr, wind, hop, nfft, noise=None, zphase=True, rule='wiener'):
@@ -101,6 +112,17 @@ def asnr(x, sr, wind, hop, nfft, noise=None, zphase=True, rule='wiener'):
         1. Wiener (default)
         2. Spectral subtraction
         3. Maximum Likelihood
+
+    Parameters
+    ----------
+    rule: str
+        Filtering rule to apply given a priori SNR.
+        Default to 'wiener'. Other options are 'specsub' and 'ml'.
+
+    See Also
+    --------
+    wiener_iter, priori2filt
+
     """
     # Estimate noise PSD first
     if noise is None:
@@ -145,11 +167,20 @@ def asnr(x, sr, wind, hop, nfft, noise=None, zphase=True, rule='wiener'):
 def asnr_spec(noisyspec, rule='wiener'):
     """Implement the a-priori SNR estimation described by Scalart and Filho.
 
-    Code based on Loizou's matlab implementation. Three suppression rules are
-    available:
-        1. Wiener (default)
-        2. Spectral subtraction
-        3. Maximum Likelihood
+    This is very similar t `asnr`, except it's computed directly on noisy
+    spectra instead of time-domain signals.
+
+    Outputs
+    -------
+    xfilt: ndarray
+        Filtered magnitude spectrogram.
+    priori: ndarray
+        A priori SNR.
+    posteri: ndarray
+        A posteriori SNR.
+    vad: ndarray
+        Speech-presence log likelihood ratio.
+
     """
     # Estimate noise PSD first
     npsd = np.mean(noisyspec[:6, :]**2, axis=0)
@@ -162,11 +193,11 @@ def asnr_spec(noisyspec, rule='wiener'):
         posteri[ii, :] = xpsd / npsd
         posteri_prime = np.maximum(posteri[ii, :] - 1, 0)  # half-wave rectify
         if ii == 0:  # initialize priori SNR
-            #set_trace()
             priori[ii, :] = _asnr_alpha + (1-_asnr_alpha)*posteri_prime
         else:
-            priori[ii, :] = _asnr_alpha*(priori2filt(priori[ii-1, :], rule)**2) *\
-                posteri[ii-1, :] + (1-_asnr_alpha)*posteri_prime
+            priori[ii, :] = _asnr_alpha*(
+                priori2filt(priori[ii-1, :], rule)**2)\
+                * posteri[ii-1, :] + (1-_asnr_alpha)*posteri_prime
         # compute speech presence log likelihood
         llk = posteri[ii, :]*priori[ii, :] / \
             (1+priori[ii, :]) - np.log(1+priori[ii, :])
@@ -184,16 +215,16 @@ def asnr_spec(noisyspec, rule='wiener'):
 
 def asnr_activate(x, sr, wind, hop, nfft, noise=None, zphase=True,
                   rule='wiener', fn='classic'):
-    """
-    This implementation should be identital to wiener_asnr, except the estimation of
-    mu is interpreted as an activation function. The activation function could be
-    one of the following:
+    """Implement a priori SNR Estimation in the view of nonlinear activation.
+
+    This implementation should be identital to asnr, except the estimation of
+    mu is interpreted as an activation function. The activation function could
+    be one of the following:
         * classic  - hard thresholding
         * step     - frequency-dependent hard thresholding
         * linear   - frequency-dependent piecewise linear
         * logistic - frequency-dependent logistic function
     """
-    # smoothing factor for a priori SNR update
     eps = 1e-16
 
     def activate(log_sigma_k, option):
@@ -285,12 +316,12 @@ def asnr_activate(x, sr, wind, hop, nfft, noise=None, zphase=True,
 
 def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
                    rule='wiener'):
-    """
-    This implementation should be identital to wiener_asnr, except that the
+    """Implement a priori SNR Estimation in a recurrent view.
+
+    This implementation should be identital to `asnr`, except that the
     mask is estimated in a recurrent way. This implementation is close to the
-    MRNN version.
+    SNRNN.
     """
-    eps = 1e-16
     # Estimate noise PSD first
     if noise is None:
         npsd_init = stpsd(x, sr, wind, hop, nfft, nframes=6)
@@ -298,7 +329,6 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
         npsd_init = stpsd(noise, sr, wind, hop, nfft, nframes=-1)
 
     xfilt = []  # holds Wiener-filtered output
-    vad = []  # holds voice activity decision
 
     freq_dim = nfft//2+1
     M = np.ones(freq_dim) * _asnr_mu  # default mu value in Loizou
@@ -343,8 +373,6 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
 
     # recurrent block
     xmag_m1 = np.zeros_like(npsd_init)
-    npsd_m1 = np.zeros_like(npsd_init)
-    xpsd_m1 = np.zeros_like(npsd_init)
     posteri_m1 = np.zeros_like(npsd_init)
     priori_m1 = np.zeros_like(npsd_init)
     llkr_m1 = np.zeros_like(npsd_init)
@@ -387,27 +415,21 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
 
 def asnr_optim(x, t, sr, wind, hop, nfft, noise=None, zphase=True,
                rule='wiener'):
-    """
-    Merely a demonstration of the asnr method given the noisy speech and the
-    true target speech
-    """
+    """Compute oracle mask for magnitude spectrogram."""
     eps = 1e-16
     siglen = min(len(x), len(t))
     if len(x) > siglen:
         x = x[:siglen]
     if len(t) > siglen:
         t = t[:siglen]
-    n = x - t
 
     xfilt = []
     for xspec, tspec in zip(stft(x, sr, wind, hop, nfft, zphase=zphase),
                             stft(t, sr, wind, hop, nfft, zphase=zphase)):
         nspec = xspec - tspec
-        xpsd = np.abs(xspec) ** 2
         tpsd = np.abs(tspec) ** 2
         npsd = np.abs(nspec) ** 2
 
-        posteri = xpsd / (npsd+eps)
         priori = tpsd / (npsd+eps)
 
         filt = priori2filt(priori, rule)
@@ -419,17 +441,8 @@ def asnr_optim(x, t, sr, wind, hop, nfft, noise=None, zphase=True,
     return xout
 
 
-def psnr2asnr(psnr, rule='wiener'):
-    """Convert a posteriori SNR to a priori SNR."""
-    posteri_prime = np.maximum(psnr - 1, 0)  # half-wave rectify
-    if i == 0:  # initialize priori SNR
-        priori = _asnr_alpha + (1-_asnr_alpha)*posteri_prime
-    else:
-        priori = _asnr_alpha*(priori2filt(priori_m1, rule)**2) *\
-            posteri_m1 + (1-_asnr_alpha)*posteri_prime
-
-
 def priori2filt(priori, rule):
+    """Compute filter gains given a priori SNR."""
     if rule == 'wiener':
         return priori / (1+priori)
     elif rule == 'specsub':

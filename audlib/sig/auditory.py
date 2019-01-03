@@ -13,6 +13,8 @@ References:
 import numpy as np
 from scipy import signal
 
+from .util import freqz
+
 
 def dft2mel(nfft, sr=8000., nfilts=0, width=1., minfrq=0., maxfrq=4000.,
             sphinx=False, constamp=True):
@@ -124,35 +126,22 @@ ERB_ORDER = 1
 # Malcolm Slaney @ Interval, June 11, 1998.
 # (c) 1998 Interval Research Corporation
 # Thanks to Alain de Cheveigne' for his suggestions and improvements.
-def erb_fbank(sig, fcoefs, band=None):
+def erb_fbank(sig, A0, A11, A12, A13, A14, A2, B0, B1, B2, gain):
     """Filter a signal using ERB filterbanks."""
-    A0, A11, A12, A13, A14, A2, B0, B1, B2, gain = fcoefs
-    if band is not None:  # select bands
-        A0 = A0[band]
-        A11 = A11[band]
-        A12 = A12[band]
-        A13 = A13[band]
-        A14 = A14[band]
-        A2 = A2[band]
-        B0 = B0[band]
-        B1 = B1[band]
-        B2 = B2[band]
-        gain = gain[band]
-
-    y = np.zeros((gain.shape[0], len(sig)))
-    for i, chan in enumerate(range(gain.shape[0]-1, -1, -1)):
-        # loop through each subband from high to low
-        y1 = signal.lfilter([A0[chan]/gain[chan],
-                             A11[chan]/gain[chan],
-                             A2[chan]/gain[chan]],
-                            [B0[chan], B1[chan], B2[chan]], sig)
-        y2 = signal.lfilter([A0[chan], A12[chan], A2[chan]],
-                            [B0[chan], B1[chan], B2[chan]], y1)
-        y3 = signal.lfilter([A0[chan], A13[chan], A2[chan]],
-                            [B0[chan], B1[chan], B2[chan]], y2)
-        y[i, :] = signal.lfilter([A0[chan], A14[chan], A2[chan]],
-                                 [B0[chan], B1[chan], B2[chan]], y3)
+    y1 = signal.lfilter([A0/gain, A11/gain, A2/gain], [B0, B1, B2], sig)
+    y2 = signal.lfilter([A0, A12, A2], [B0, B1, B2], y1)
+    y3 = signal.lfilter([A0, A13, A2], [B0, B1, B2], y2)
+    y = signal.lfilter([A0, A14, A2], [B0, B1, B2], y3)
     return y
+
+
+def erb_freqz(A0, A11, A12, A13, A14, A2, B0, B1, B2, gain, nfft):
+    """Compute frequency reponse given one ERB filter parameters."""
+    ww, h1 = freqz([A0/gain, A11/gain, A2/gain], [B0, B1, B2], nfft)
+    _, h2 = freqz([A0, A12, A2], [B0, B1, B2], nfft)
+    __, h3 = freqz([A0, A13, A2], [B0, B1, B2], nfft)
+    ___, h4 = freqz([A0, A14, A2], [B0, B1, B2], nfft)
+    return ww, h1*h2*h3*h4
 
 
 # Directly copy from Ellis' package. Below is his description:
@@ -182,14 +171,11 @@ def erb_fbank(sig, fcoefs, band=None):
 # when the eigth root is taken to give the pole location.  These small
 # errors lead to poles outside the unit circle and instability.  Thanks
 # to Julius Smith for leading me to the proper explanation.
-def erb_filters(sr, num_chan, low_freq):
+
+
+def erb_filters(sr, cf):
     """Construct ERB filterbanks."""
     T = 1./sr
-    if type(num_chan) is int:
-        # make center frequencies in this case
-        cf = erb_space(low_freq, int(sr/2), num_chan)
-    else:
-        cf = num_chan.copy()
     ERB = ((cf/ERB_EAR_Q)**ERB_ORDER + ERB_MIN_BW**ERB_ORDER)**(1/ERB_ORDER)
     B = 1.019*2*np.pi*ERB
     A0 = T
@@ -226,12 +212,10 @@ def erb_filters(sr, num_chan, low_freq):
         / (-2 / np.exp(2*B*T) - 2*np.exp(4*1j*cf*np.pi*T)
            + 2*(1 + np.exp(4*1j*cf*np.pi*T))/np.exp(B*T))**4)
 
-    allfilts = np.ones((len(cf)))
-    return (A0*allfilts, A11, A12, A13, A14,
-            A2*allfilts, B0*allfilts, B1, B2, gain), cf
+    return A0, A11, A12, A13, A14, A2, B0, B1, B2, gain
 
 
-def erb_space(low_freq=100., high_freq=11025., N=100):
+def erb_space(N, low_freq, high_freq):
     """Construct linear frequencies on an ERB scale."""
     # This function computes an array of N frequencies uniformly spaced between
     # highFreq and lowFreq on an ERB scale.  N is set to 100 if not specified.

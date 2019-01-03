@@ -5,6 +5,8 @@ from numpy.fft import fft
 import numpy.random as rand
 from scipy.signal import lfilter
 
+FREQZ_CEILING = 1e5
+
 
 def pre_emphasis(sig, alpha):
     """First-order highpass filter signal."""
@@ -21,6 +23,37 @@ def firfreqz(h, nfft):
     ww = np.linspace(0, 2, num=nfft, endpoint=False)
     hh = fft(h, n=nfft)
     return ww, hh
+
+
+def iirfreqz(h, nfft, ceiling=FREQZ_CEILING):
+    """Compute frequency response of an IIR filter.
+
+    Parameters
+    ----------
+    h: array_like
+        IIR filter coefficent array for denominator polynomial.
+        e.g. y[n] = x[n] + a*y[n-1] + b*y[n-2]
+             Y(z) = X(z) + a*z^-1*Y(z) + b*z^-2*Y(z)
+                                  1
+             H(z) = ---------------------------------
+                           1 - a*z^-1 -b*z^-2
+             h = [1, -a, -b]
+
+    """
+    ww = np.linspace(0, 2, num=nfft, endpoint=False)
+    hh_inv = fft(h, n=nfft)
+    hh = np.zeros_like(hh_inv)
+    zeros = hh_inv == 0
+    hh[~zeros] = 1 / hh_inv
+    hh[zeros] = ceiling
+    return ww, hh
+
+
+def freqz(numerator, demonimator, nfft, ceiling=FREQZ_CEILING):
+    """Compute the frequency response of a z-transform polynomial."""
+    ww, hh_numer = firfreqz(numerator, nfft)
+    __, hh_denom = iirfreqz(demonimator, nfft, ceiling=ceiling)
+    return ww, hh_numer*hh_denom
 
 
 def nextpow2(n):
