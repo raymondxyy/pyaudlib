@@ -90,29 +90,39 @@ def sample_pair(x, y, length, num, verbose=False):
 
 
 def add_noise(x, n, snr=None):
-    """Add user provided noise n with SNR=snr to signal x.
+    """Add user provided noise n with SNR=snr to signal x."""
+    noise = additive_noise(x, n, snr=snr)
+    if snr == -np.inf:
+        return noise
+    else:
+        return x + noise
+
+
+def additive_noise(x, n, snr=None):
+    """Make additive noise at specific SNR.
 
     SNR = 10log10(Signal Energy/Noise Energy)
     NE = SE/10**(SNR/10)
     """
-    # Take care of size difference in case x and n have different shapes
+    if snr == np.inf:
+        return np.zeros_like(x)
+    # Modify noise to have equal length as signal
     xlen, nlen = len(x), len(n)
     if xlen > nlen:  # need to append noise several times to cover x range
-        nn = np.tile(n, int(np.ceil(xlen/nlen)))
-        nlen = len(nn)
+        nn = np.tile(n, int(np.ceil(xlen/nlen)))[:xlen]
     else:
-        nn = n
-    if xlen < nlen:  # slice a portion of noise
-        nn = sample(nn, xlen, 1)[0]
-    else:  # equal length
-        nn = nn
+        nn = n[:xlen]
 
+    if snr == -np.inf:
+        return nn
     if snr is None:
         snr = (rand.random()-0.25)*20
+
     xe = x.dot(x)  # signal energy
-    ne = nn.dot(nn)  # noise power
-    nscale = np.sqrt(xe/(10**(snr/10.)) / ne)  # scaling factor
-    return x + nscale*nn
+    ne = nn.dot(nn)  # noise energy
+    nscale = np.sqrt(xe/(10**(snr/10.)) / ne)
+
+    return nscale*nn
 
 
 def add_white_noise(x, snr=None):

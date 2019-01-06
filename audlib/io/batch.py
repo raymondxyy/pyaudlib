@@ -161,7 +161,6 @@ def dir2files(indir, filter_fn, head_tail=False):
     Returns:
         flist     - a list of full paths of file names.
     """
-    #set_trace()
     indir = os.path.abspath(indir)
     if os.path.isfile(indir):  # file mode
         if filter_fn(indir):
@@ -173,8 +172,10 @@ def dir2files(indir, filter_fn, head_tail=False):
             return []
     flist = []
     for root, dirs, files in os.walk(indir):
-        for fname in filter(filter_fn, files):
+        for fname in files:
             fullpath = os.path.join(root, fname)
+            if not filter_fn(fullpath):
+                continue
             if head_tail:
                 flist.append((indir, os.path.relpath(fullpath, indir)))
             else:

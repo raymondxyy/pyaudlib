@@ -18,6 +18,28 @@ import numpy as np
 from .window import hop2hsize
 
 
+def stcenters(sig, sr, wind, hop, trange=(None, None)):
+    """Calculate window centers for each frame.
+
+    See `numframes` for meaning of the parameters.
+    """
+    ssize = len(sig)
+    fsize = len(wind)
+    hsize = hop2hsize(wind, hop)
+    hfrac = hsize*1. / fsize
+    sstart, send = trange
+    if sstart is None:
+        sstart = int(-fsize * (1-hfrac))
+    else:
+        sstart = int(sstart * sr)
+    if send is None:
+        send = ssize
+    else:
+        send = int(send * sr)
+
+    return (np.arange(sstart, send, hsize) + (fsize-1)/2.) / sr
+
+
 def numframes(sig, sr, wind, hop, trange=(None, None)):
     """Calculate total number of frames.
 

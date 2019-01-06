@@ -37,7 +37,8 @@ def sphereinfo(path):
         for line in fp:
             if line.strip() == b'end_head':
                 break
-            field, flag, val = line.strip().decode().split()
+            items = line.strip().decode().split()
+            field, flag, val = items[0], items[1], ' '.join(items[2:])
             info[field] = int(val) if flag == '-i' else val
 
     return info
