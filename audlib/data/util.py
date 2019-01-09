@@ -83,10 +83,8 @@ def randread(fpath, sr=None, minlen=None, maxlen=None):
 
 
 def mix(sigs, sign, sr, snr):
-    """Additively mix clean signal and noise at a specific SNR.
-
-    TODO: need to update this.
-    """
+    """Additively mix clean signal and noise at a specific SNR."""
+    # TODO: Need to either update or remove this.
     noisy = np.zeros_like(sigs)
     clean = np.zeros_like(sigs)
     vad = []

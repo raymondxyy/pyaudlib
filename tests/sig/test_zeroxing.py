@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from audlib.sig.stproc import zeroxing
+from audlib.sig.temporal import zeroxing
 
 
 def test_zeroxing():

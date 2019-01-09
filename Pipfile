@@ -13,6 +13,8 @@ soundfile = "*"
 scipy = "*"
 resampy = "*"
 matplotlib = "*"
+torch = "*"
+torchvision = "*"
 
 [requires]
 python_version = "3.6"

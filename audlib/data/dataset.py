@@ -76,19 +76,8 @@ class ASRDataset(Dataset):
 
     @property
     def transcripts(self):
-        """Hold all transcripts covering all `valid_files`."""
+        """Obtain all transcripts for valid files."""
         raise NotImplementedError
-
-    def __init__(self, dataset, transmap):
-        """Instantiate an ASR dataset.
-
-        `dataset` should have the following properties:
-            - `root` for root directory
-            - `all_files` for list of valid audio files
-        """
-        super(ASRDataset, self).__init__()
-        self.root = dataset.root
-        self.transmap = transmap
 
     def __len__(self):
         """Return number of valid files in the dataset."""

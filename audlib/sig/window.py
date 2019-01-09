@@ -43,22 +43,23 @@ def hamming(wsize, hop=None, nchan=None, synth=False):
     normalize : Normalize window amplitude for unity overlap-add.
 
     """
-    if synth and (hop is not None):  # for perfect OLA reconstruction in time
-        if wsize % 2:  # fix endpoint problem for odd-size window
-            wind = np.hamming(wsize)
-            wind[0] /= 2.
-            wind[-1] /= 2.
-        else:  # even-size window
-            wind = np.hamming(wsize+1)
-            wind = wind[:-1]
+    if synth:
+        if (hop is not None):  # for perfect OLA reconstruction in time
+            if wsize % 2:  # fix endpoint problem for odd-size window
+                wind = np.hamming(wsize)
+                wind[0] /= 2.
+                wind[-1] /= 2.
+            else:  # even-size window
+                wind = np.hamming(wsize+1)
+                wind = wind[:-1]
+            assert tnorm(wind, hop),\
+                "[wsize:{}, hop:{}] violates COLA in time.".format(wsize, hop)
+        elif nchan is not None:  # for perfect filterbank synthesis
+            assert fnorm(wind, nchan),\
+                "[wsize:{}, nchan:{}] violates COLA in frequency.".format(
+                    wsize, nchan)
     else:
         wind = np.hamming(wsize)
-    if hop is not None:
-        assert tnorm(wind, hop),\
-            "Parameters do not satisfy COLA in time.".format(wsize, hop)
-    elif nchan is not None:
-        assert fnorm(wind, nchan),\
-            "Parameters do not satisfy COLA in frequency.".format(wsize, nchan)
 
     return wind
 

@@ -53,17 +53,14 @@ class SEVCTKNoRev(SEDataset):
 
         self.transform = transform
 
-    @property
-    def valid_files(self):
-        """Collect all audio files."""
-        valid_files = []
+        self._valid_files = []
         if self.istest:
             for noisy1 in glob.iglob(
                 os.path.join(self.noisydir,
                              '{}/*1.wav'.format(self.testdir))):
                 # Second channel path and clean reference
                 noisy2 = noisy1[:-5] + '2.wav'
-                valid_files.append((noisy1, noisy2))
+                self._valid_files.append((noisy1, noisy2))
         else:
             for root, dirs, files in os.walk(self.noisydir):
                 # Sweep first channel
@@ -75,9 +72,12 @@ class SEVCTKNoRev(SEDataset):
                     noise = os.path.join(self.noisedir,
                                          "{}_{}_1_CH1.raw".format(
                                              bname[12:15], bname[9:11]))
-                    valid_files.append((noisy1, noisy2, meta, noise))
+                    self._valid_files.append((noisy1, noisy2, meta, noise))
 
-        return valid_files
+    @property
+    def valid_files(self):
+        """Collect all audio files."""
+        return self._valid_files
 
     def __getitem__(self, idx):
         """Get idx-th path to audio sample."""
@@ -177,10 +177,7 @@ class SEVCTK2chan(SEDataset):
         self.transform = transform
         self.select = select
 
-    @property
-    def valid_files(self):
-        """Collect all valid files."""
-        valid_files = []  # holds all files to be processed
+        self._valid_files = []
         if self.istest:
             for noisy1 in glob.iglob(
                     os.path.join(self.noisydir,
@@ -188,7 +185,7 @@ class SEVCTK2chan(SEDataset):
                 # Second channel path and clean reference
                 noisy2 = noisy1[:-5] + '2.wav'
                 # Group filenames and append to the list
-                valid_files.append((noisy1, noisy2))
+                self._valid_files.append((noisy1, noisy2))
                 for pp in noisy1, noisy2:
                     assert os.path.exists(pp), '{} does not exist!'.format(pp)
         else:
@@ -204,12 +201,15 @@ class SEVCTK2chan(SEDataset):
                                              bname[12:15], bname[9:11],
                                              self.subset))
                     # Group filenames and append to the list
-                    valid_files.append((noisy1, noisy2, meta, noise))
+                    self._valid_files.append((noisy1, noisy2, meta, noise))
                     for pp in noisy1, noisy2, meta, noise:
                         assert os.path.exists(pp), \
                             '{} does not exist!'.format(pp)
 
-        return valid_files
+    @property
+    def valid_files(self):
+        """Collect all valid files."""
+        return self._valid_files
 
     def __getitem__(self, idx):
         """Get idx-th path to audio sample."""

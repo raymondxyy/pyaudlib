@@ -126,27 +126,28 @@ class WSJ(Dataset):
 
     """
 
-    def __init__(self, root, train=True, filt=None, transform=None):
+    def __init__(self, root, ndxpath, train=True, filt=None, transform=None):
         """Instantiate a generic WSJ0 dataset by index files."""
         super(WSJ, self).__init__()
         self.root = root
         self.train = train
-        self.filt = filt
         self.transform = transform
-        self.tiregex = NotImplementedError
-        self.eiregex = NotImplementedError
+        ndxpath = os.path.join(root, ndxpath)
+
+        self._all_files = []  # holds all valid data paths
+        if self.train:
+            for idxpath in glob.iglob(ndxpath):
+                self._all_files.extend(idx2paths(idxpath, self.root))
+        else:
+            for idxpath in glob.iglob(ndxpath):
+                self._all_files.extend(
+                    idx2paths(idxpath, self.root, train=False))
+        self._all_files = list(filter(filt, self._all_files))
 
     @property
     def all_files(self):
         """Build valid file list."""
-        out = []  # holds all valid data paths
-        if self.train:
-            for idxpath in glob.iglob(self.tiregex):
-                out.extend(idx2paths(idxpath, self.root))
-        else:
-            for idxpath in glob.iglob(self.eiregex):
-                out.extend(idx2paths(idxpath, self.root, train=False))
-        return list(filter(self.filt, out))
+        return self._all_files
 
     def __str__(self):
         """Print out a summary of instantiated WSJ0."""
@@ -190,12 +191,11 @@ class WSJ0(WSJ):
 
     def __init__(self, root, train=True, filt=None, transform=None):
         """Instantiate generic WSJ0."""
-        super(WSJ0, self).__init__(root, train, filt, transform)
-        # Validate directories of file indices and transcriptions
-        self.tiregex = os.path.join(
-            root, "11-13.1/wsj0/doc/indices/train/*.ndx")
-        self.eiregex = os.path.join(
-            root, "11-13.1/wsj0/doc/indices/test/*/*.ndx")
+        if train:
+            ndxpath = "11-13.1/wsj0/doc/indices/train/*.ndx"
+        else:
+            ndxpath = "11-13.1/wsj0/doc/indices/test/*/*.ndx"
+        super(WSJ0, self).__init__(root, ndxpath, train, filt, transform)
 
 
 class WSJ1(WSJ):
@@ -203,33 +203,29 @@ class WSJ1(WSJ):
 
     def __init__(self, root, train=True, filt=None, transform=None):
         """Instantiate generic WSJ1."""
-        super(WSJ1, self).__init__(root, train, filt, transform)
-        # Validate directories of file indices and transcriptions
-        self.tiregex = os.path.join(
-            root, "13-34.1/wsj1/doc/indices/si_tr_*.ndx")
-        self.eiregex = os.path.join(root, "13-34.1/wsj1/doc/indices/h1_p0.ndx")
+        if train:
+            ndxpath = "13-34.1/wsj1/doc/indices/si_tr_*.ndx"
+        else:
+            ndxpath = "13-34.1/wsj1/doc/indices/h1_p0.ndx"
+        super(WSJ1, self).__init__(root, ndxpath, train, filt, transform)
 
 
 class ASRWSJ(ASRDataset):
     """ASR framework for WSJ0 and WSJ1."""
 
-    def __init__(self, dataset, transmap):
+    def __init__(self, dataset, transmap, transpath, verbose=False):
         """Instantiate a WSJ dataset for speech recognition.
 
         Parameters
         ----------
-        root: str
-            The root directory of WSJ0.
-        transmap: class
+        dataset: Dataset class
+            Dataset to be processed.
+        transmap: TranscriptMap class
             A transcript map instance as defined in `audlib.asr.util`.
-        train: bool; default to True
-            Instantiate the training partition if True; otherwise the test.
-        filt: callable(str) -> bool
-            A function that returns a boolean given a path to an audio. Use
-            this to define training subsets with various conditions, or simply
-            filter audio on length or other criteria.
-        transform: callable(dict) -> dict
-            User-defined transformation function.
+        transpath: str
+            Path pattern to transcripts.
+        verbose: bool
+            Print info while processing?
 
         Returns
         -------
@@ -248,47 +244,35 @@ class ASRWSJ(ASRDataset):
         audlib.asr.util.TranscriptMap
 
         """
-        super(ASRWSJ, self).__init__(dataset, transmap)
-        self.root = dataset.root
+        # TODO: Reduce cyclomatic complexity
+        super(ASRWSJ, self).__init__()
         self.dataset = dataset
         self.transmap = transmap
-
-        # Validate directories of file transcriptions
-        self.tdregex = NotImplementedError
-        self.edregex = NotImplementedError
-
-    @property
-    def transcripts(self):
-        """Build transcript dictionary."""
+        self.verbose = verbose
         # Store all transcriptions in a dictionary
         # From a file path, retrieve its transcript with
         # self.transdict[cond][sid][uid]
-        out = {}  # holds all valid transcriptions
-        if self.dataset.train:
-            for dotpath in glob.iglob(self.tdregex):
-                cond, sid = dotpath.split('/')[-3:-1]
-                if cond not in out:
-                    out[cond] = {}
-                if sid not in out[cond]:
-                    out[cond][sid] = {}
-                out[cond][sid].update(dot2transcripts(dotpath))
-        else:
-            for dotpath in glob.iglob(self.edregex):
-                cond, sid = dotpath.split('/')[-3:-1]
-                if cond not in out:
-                    out[cond] = {}
-                if sid not in out[cond]:
-                    out[cond][sid] = {}
-                out[cond][sid].update(dot2transcripts(dotpath))
-        return out
+        if self.verbose:
+            print("Preparing transcript tree.")
+        self._transcripts = {}  # holds all valid transcriptions
+        for dotpath in glob.iglob(transpath):
+            cond, sid = dotpath.split('/')[-3:-1]
+            if cond not in self._transcripts:
+                self._transcripts[cond] = {}
+            if sid not in self._transcripts[cond]:
+                self._transcripts[cond][sid] = {}
+            self._transcripts[cond][sid].update(dot2transcripts(dotpath))
 
-    @property
-    def valid_files(self):
-        """Prepare valid file list."""
-        out = []  # holds valid file path indices
+        if self.verbose:
+            print("Preparing valid files.")
+        self._valid_files = []
         self.oovs = {}  # holds out-of-vocab words
+        self.vocab_hist = [0] * len(self.transmap)
         for ii, fpath in enumerate(self.dataset.all_files):
-            fpath = os.path.join(self.root, fpath)
+            if not ((ii+1) % 1000) and self.verbose:
+                print("Processing [{}/{}] files.".format(
+                    ii+1, len(self.dataset)))
+            fpath = os.path.join(self.dataset.root, fpath)
             if os.path.exists(fpath):
                 cond, sid, uid = fpath.split('/')[-3:]
                 uid = uid.split('.')[0]
@@ -297,16 +281,32 @@ class ASRWSJ(ASRDataset):
                 except KeyError:  # no transcript
                     continue
                 else:
+                    if "[BAD_RECORDING]" in trans:
+                        continue
                     if self.transmap.transcribable(trans):
-                        out.append(ii)
+                        self._valid_files.append(ii)
+                        # Accumulate vocab stats here
+                        for ll in self.transmap.trans2label(trans):
+                            self.vocab_hist[ll] += 1
                     else:
+                        if verbose:
+                            print("OOV in [{}]: [{}]".format(fpath, trans))
                         oov = self.transmap.trans2oov(trans)
                         for w in oov:
                             if w in self.oovs:
                                 self.oovs[w] += oov[w]
                             else:
                                 self.oovs[w] = oov[w]
-        return out
+
+    @property
+    def valid_files(self):
+        """Return valid file index list."""
+        return self._valid_files
+
+    @property
+    def transcripts(self):
+        """Return trancript dictionary for valid files."""
+        return self._transcripts
 
     def __str__(self):
         """Print out a summary of instantiated WSJ0."""
@@ -325,10 +325,8 @@ class ASRWSJ(ASRDataset):
 
     def __repr__(self):
         """Representation of WSJ0."""
-        return r"""{}({}, {}, train={}, filt={}, transform={})
-        """.format(self.__class__.__name__, self.root, self.transmap,
-                   self.dataset.train, self.dataset.filt,
-                   self.dataset.transform)
+        return r"""{}({}, {})
+        """.format(self.__class__.__name__, self.dataset, self.transmap)
 
     def __len__(self):
         """Return number of audio files to be processed."""
@@ -337,7 +335,7 @@ class ASRWSJ(ASRDataset):
     def __getitem__(self, idx):
         """Retrieve the i-th example from the dataset."""
         fpath = os.path.join(
-            self.root, self.dataset.all_files[self.valid_files[idx]])
+            self.dataset.root, self.dataset.all_files[self.valid_files[idx]])
 
         # Find corresponding transcript
         cond, sid, uid = fpath.split('/')[-3:]
@@ -364,21 +362,25 @@ class ASRWSJ(ASRDataset):
 class ASRWSJ0(ASRWSJ):
     """ASR dataset for WSJ0."""
 
-    def __init__(self, dataset, transmap):
+    def __init__(self, dataset, transmap, verbose=False):
         """Instantiate WSJ0 for automatic speech recognition."""
-        super(ASRWSJ0, self).__init__(dataset, transmap)
-        self.tdregex = os.path.join(
-            self.root, "11-4.1/wsj0/transcrp/dots/*/*/*.dot")
-        self.edregex = os.path.join(self.root, "11-14.1/wsj0/*/*/*.dot")
+        if dataset.train:
+            transpath = os.path.join(
+                dataset.root, "11-4.1/wsj0/transcrp/dots/*/*/*.dot")
+        else:
+            transpath = os.path.join(dataset.root, "11-14.1/wsj0/*/*/*.dot")
+        super(ASRWSJ0, self).__init__(dataset, transmap, transpath, verbose)
 
 
 class ASRWSJ1(ASRWSJ):
     """ASR dataset for WSJ1."""
 
-    def __init__(self, dataset, transmap):
+    def __init__(self, dataset, transmap, verbose=False):
         """Instantiate WSJ1 for automatic speech recognition."""
-        super(ASRWSJ1, self).__init__(dataset, transmap)
-        self.tdregex = os.path.join(
-            self.root, "13-34.1/wsj1/trans/wsj1/si_tr_*/*/*.dot")
-        self.edregex = os.path.join(
-            self.root, "13-34.1/wsj1/trans/wsj1/si_dt_20/*/*.dot")
+        if dataset.train:
+            transpath = os.path.join(
+                dataset.root, "13-34.1/wsj1/trans/wsj1/si_tr_*/*/*.dot")
+        else:
+            transpath = os.path.join(
+                dataset.root, "13-34.1/wsj1/trans/wsj1/si_dt_20/*/*.dot")
+        super(ASRWSJ1, self).__init__(dataset, transmap, transpath, verbose)

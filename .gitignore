@@ -120,3 +120,10 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# MacOS
+.DS_Store
+
+# From egs
+vtlp/
+out.pdf

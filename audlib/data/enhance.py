@@ -7,8 +7,6 @@ from ..sig.util import additive_noise
 from .dataset import Dataset, SEDataset
 from .util import chk_duration, randread
 
-_norm = True
-
 
 class RandSample(Dataset):
     """Create a dataset by random sampling of all valid audio files."""
@@ -42,13 +40,14 @@ class RandSample(Dataset):
         self.minlen, self.maxlen = sampdur_range
         self.exts = exts
 
+        self._all_files = dir2files(
+            self.root, lambda path: path.endswith(exts)
+            and chk_duration(path, minlen=self.mindur_per_file))
+
     @property
     def all_files(self):
         """Retrieve all file paths."""
-        def good_audio(fpath):
-            return fpath.endswith(self.exts) and \
-                chk_duration(fpath, minlen=self.mindur_per_file)
-        return dir2files(self.root, good_audio)
+        return self._all_files
 
     def __getitem__(self, idx):
         """Get idx-th sample."""

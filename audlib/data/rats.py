@@ -90,10 +90,7 @@ class SERATS_SAD(SEDataset):
         self.select = select
         self.transform = transform
 
-    @property
-    def valid_files(self):
-        """Get all valid files."""
-        valid_files = []  # holds all files to be processed
+        self._valid_files = []
         for chan in self.channels:
             for noisy in glob.iglob(os.path.join(
                     self.noisydir, chan, '*.flac')):
@@ -102,8 +99,12 @@ class SERATS_SAD(SEDataset):
                                                "{}*.flac".format(fid)))[0]
                 vad = glob.glob(os.path.join(self.vaddir,
                                              "{}*.tab".format(fid)))[0]
-                valid_files.append((noisy, clean, vad))
-        return valid_files
+                self._valid_files.append((noisy, clean, vad))
+
+    @property
+    def valid_files(self):
+        """Get all valid files."""
+        return self._valid_files
 
     def __getitem__(self, idx):
         """Convert (noisy, clean, vad) paths to features on indexing."""
