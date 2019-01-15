@@ -20,7 +20,7 @@ class Filterbank(object):
 
     All types of filterbanks should subclass this class and implement:
         * __len__(): number of filterbanks
-        * __get_item__(i): i-th filter object
+        * __getitem__(i): i-th filter object
         * freqz(i): frequency response of i-th filter
         * filter(sig, i): filter signal `sig` by i-th filter
     """

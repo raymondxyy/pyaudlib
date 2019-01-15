@@ -81,6 +81,30 @@ def zeroxing(sig, option=None, interp=False):
     return np.sort(np.concatenate((zc_zeros, zc_nonzeros)))
 
 
+def zcrate(sig, option=None):
+    """Compute the zero-crossing rate of a signal.
+
+    Parameters
+    ----------
+    sig: array_like
+        Signal to be processed.
+    option: str, optional
+        'up' for upward zero-crossings; 'down' for downward zero-crossings.
+        Default to None, which counts both types.
+
+    Returns
+    -------
+    out: float in range [0, 1]
+        Number of zero-crossings / signal length.
+
+    See Also
+    --------
+    zeroxing
+
+    """
+    return len(zeroxing(sig, option=option)) / len(sig)
+
+
 def lpc(frame, order, method='autocorr', levinson=False, out='full',
         force_stable=True):
     """Linear predictive coding (LPC).

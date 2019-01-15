@@ -77,6 +77,22 @@ def audioinfo(path):
         return SphereInfo(path)
 
 
+def sphereread(path, start=0, stop=None):
+    """Read a embedded-shorten .sph file using sph2pipe.
+
+    Assume `stop` does not exceed total duration.
+    """
+    assert start >= 0, "Must start at non-negative sample point."
+    if stop is None:
+        dur = "{}:".format(start)
+    else:
+        dur = "{}:{}".format(start, stop)
+    cmd = [_sph2pipe, '-f', 'wav', '-s', dur, path]
+    x, xsr = sf.read(io.BytesIO(subprocess.check_output(cmd)))
+
+    return x, xsr
+
+
 def audioread(path, sr=None, start=0, stop=None, force_mono=False,
               norm=False, verbose=False):
     """Read audio from path and return an numpy array.
@@ -103,8 +119,7 @@ def audioread(path, sr=None, start=0, stop=None, force_mono=False,
     except RuntimeError:  # fix for sph pcm-embedded shortened v2
         if verbose:
             print('WARNING: Audio type not supported. Trying sph2pipe...')
-        wavbytes = subprocess.check_output([_sph2pipe, '-f', 'wav', path])
-        x, xsr = sf.read(io.BytesIO(wavbytes), start=start, stop=stop)
+        x, xsr = sphereread(path, start=start, stop=stop)
 
     if force_mono and (len(x.shape) > 1):
         x = np.sum(x, axis=1)/2.  # stereo->mono
