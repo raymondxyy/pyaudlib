@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="0e7ea1e8-4900-4a7f-89df-82ab446298fd" name="Default" comment="">
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/egs/asr/airbus_attention_vtlp_CTC.py" afterPath="$PROJECT_DIR$/egs/asr/airbus_attention_vtlp_CTC.py" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/egs/asr/transforms.py" afterPath="$PROJECT_DIR$/egs/asr/transforms.py" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -13,11 +14,11 @@
   </component>
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
-      <file leaf-file-name="airbus_attention_vtlp_CTC.py" pinned="false" current-in-tab="false">
+      <file leaf-file-name="airbus_attention_vtlp_CTC.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/egs/asr/airbus_attention_vtlp_CTC.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="1102">
-              <caret line="81" column="0" lean-forward="false" selection-start-line="81" selection-start-column="0" selection-end-line="81" selection-end-column="0" />
+            <state relative-caret-position="127">
+              <caret line="286" column="25" lean-forward="true" selection-start-line="286" selection-start-column="25" selection-end-line="286" selection-end-column="25" />
               <folding />
             </state>
           </provider>
@@ -63,11 +64,11 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="transforms.py" pinned="false" current-in-tab="true">
+      <file leaf-file-name="transforms.py" pinned="false" current-in-tab="false">
         <entry file="file://$PROJECT_DIR$/egs/asr/transforms.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="427">
-              <caret line="124" column="4" lean-forward="false" selection-start-line="124" selection-start-column="4" selection-end-line="124" selection-end-column="4" />
+            <state relative-caret-position="557">
+              <caret line="126" column="0" lean-forward="true" selection-start-line="126" selection-start-column="0" selection-end-line="126" selection-end-column="0" />
               <folding />
             </state>
           </provider>
@@ -93,6 +94,7 @@
       <find>bet</find>
       <find>map</find>
       <find>feature</find>
+      <find>getInputChar</find>
     </findStrings>
   </component>
   <component name="Git.Settings">
@@ -103,6 +105,7 @@
       <list>
         <option value="$PROJECT_DIR$/audlib/nn/nn.py" />
         <option value="$PROJECT_DIR$/egs/asr/transforms.py" />
+        <option value="$PROJECT_DIR$/egs/asr/airbus_attention_vtlp_CTC.py" />
       </list>
     </option>
   </component>
@@ -301,14 +304,6 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/egs/asr/airbus_attention_vtlp_CTC.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="1102">
-          <caret line="81" column="0" lean-forward="false" selection-start-line="81" selection-start-column="0" selection-end-line="81" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
     <entry file="file://$PROJECT_DIR$/audlib/data/wsj.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="3952">
@@ -357,6 +352,14 @@
         </state>
       </provider>
     </entry>
+    <entry file="file://$PROJECT_DIR$/egs/asr/transforms.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="557">
+          <caret line="126" column="0" lean-forward="true" selection-start-line="126" selection-start-column="0" selection-end-line="126" selection-end-column="0" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
     <entry file="file://$PROJECT_DIR$/audlib/nn/nn.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="382">
@@ -367,10 +370,10 @@
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/egs/asr/transforms.py">
+    <entry file="file://$PROJECT_DIR$/egs/asr/airbus_attention_vtlp_CTC.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="427">
-          <caret line="124" column="4" lean-forward="false" selection-start-line="124" selection-start-column="4" selection-end-line="124" selection-end-column="4" />
+        <state relative-caret-position="127">
+          <caret line="286" column="25" lean-forward="true" selection-start-line="286" selection-start-column="25" selection-end-line="286" selection-end-column="25" />
           <folding />
         </state>
       </provider>

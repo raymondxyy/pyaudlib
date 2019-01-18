@@ -274,24 +274,27 @@ class DecoderModel(nn.Module):
         generateds = torch.cat(generateds, dim=1)
         return logits, generateds, greedys
 
-    def getInputChar(self, pred_char, input_y):
-        '''
-        select input from prediction of last time step or from groundtruth
-        the probability of choosing groundtruth is given by self.net_out_prob
-        input (B, 1)
-        '''
-        # efficient, less variable
-        p = torch.ones((pred_char.size()), out=pred_char.data.new(
-            pred_char.size())).float() * (1 - self.net_out_prob)
-        # REVIEW: @Raymond changed the code below because it throws an error
-        # from torch.bernoulli. @Shangwu make sure this is fine.
-        #cond1 = to_variable(torch.bernoulli(p, out=p.new(p.size())).long())
+    def getInputChar(self, pred, input):
+        """
+        Sample input from prediction of last time step and from ground-truth,
+        the probability of choosing ground-truth is given by self.net_out_prob.
+
+        Parameters
+        ----------
+
+        pred: int tensor
+            character output prediction of shape (B, 1).
+        input: int tensor
+            character ground-truth input of shape (B, 1).
+        """
+        p = torch.ones((pred.size()), out=pred.data.new(
+            pred.size())).float() * self.net_out_prob
         cond1 = torch.bernoulli(p).long()
         cond2 = 1 - cond1
 
-        input_char = cond1 * input_y + cond2 * pred_char
+        sampled_input = cond1 * input + cond2 * pred
 
-        return input_char
+        return sampled_input
 
     def calculate_prob(self, states, t, pred_char, keys, values, mask):
         # return output logits, newstates

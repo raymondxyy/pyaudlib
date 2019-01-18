@@ -122,7 +122,7 @@ def sort_by_feat_length_collate_fn(batch):
     """
 
     # TODO: sort in collate_fn instead of network!!!
-    
+
     batch_size = len(batch)
 
     max_len = 0
