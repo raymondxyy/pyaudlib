@@ -1,5 +1,7 @@
 """Dataset Classes for Speech Enhancement Applications."""
 
+from random import randint
+
 import numpy as np
 
 from ..io.batch import dir2files
@@ -12,8 +14,8 @@ class RandSample(Dataset):
     """Create a dataset by random sampling of all valid audio files."""
 
     def __init__(self, root, sr=None, mindur_per_file=None,
-                 exts=('.wav', '.sph', '.flac'),
-                 sampdur_range=(None, None)):
+                 exts=('.wav', '.sph', '.flac'), sampdur_range=(None, None),
+                 transform=None):
         """Instantiate a random sampling dataset.
 
         Parameters
@@ -31,6 +33,8 @@ class RandSample(Dataset):
         sampdur_range: tuple of float, optional
             Minimum and maximum duration of each sample in seconds to be read.
             Default to unconstrained lengths.
+        transform: callable
+            Tranform to be applied on samples.
 
         """
         super(RandSample, self).__init__()
@@ -39,6 +43,7 @@ class RandSample(Dataset):
         self.mindur_per_file = mindur_per_file
         self.minlen, self.maxlen = sampdur_range
         self.exts = exts
+        self.transform = transform
 
         self._all_files = dir2files(
             self.root, lambda path: path.endswith(exts)
@@ -55,6 +60,9 @@ class RandSample(Dataset):
                            minlen=self.minlen, maxlen=self.maxlen)
         sample = {'data': data, 'sr': self.sr}
 
+        if self.transform:
+            sample = self.transform(sample)
+
         return sample
 
 
@@ -68,11 +76,12 @@ class Additive(SEDataset):
     """
 
     def __init__(self, targetset, noiseset,
-                 snrs=[-np.inf, -20, -15, -10, -5, 0, 5, 10, 15, 20, np.inf]):
+                 snrs=[-np.inf, -20, -15, -10, -5, 0, 5, 10, 15, 20, np.inf],
+                 transform=None):
         """Build a synthetic additive dataset.
 
-        The class will mix every target signal with every noise signal at
-        every specified SNR.
+        This class will mix a randomly chosen noise at a randomly chosen SNR
+        into each signal in the target set.
 
         Parameters
         ----------
@@ -95,10 +104,11 @@ class Additive(SEDataset):
         self.targetset = targetset
         self.noiseset = noiseset
         self.snrs = snrs
+        self.transform = transform
 
     def __len__(self):
         """Each speech file is mixed with every noise file, at each SNR."""
-        return len(self.targetset) * len(self.noiseset) * len(self.snrs)
+        return len(self.targetset)
 
     def __getitem__(self, idx):
         """Retrieve idx-th sample.
@@ -108,12 +118,11 @@ class Additive(SEDataset):
         1 --> s[0],n[0],snr[1] ...
         k --> s[0],n[1],snr[0] ...
         """
-        samp_clean = self.targetset[idx // (len(self.noiseset)*len(self.snrs))]
-        samp_noise = self.noiseset[(idx % (len(self.noiseset)*len(self.snrs))
-                                    ) // len(self.snrs)]
-        snr = self.snrs[idx % len(self.snrs)]
+        samp_clean = self.targetset[idx]
+        samp_noise = self.noiseset[randint(0, len(self.noiseset)-1)]
+        snr = self.snrs[randint(0, len(self.snrs)-1)]
 
-        clean = samp_clean['data']
+        sr, clean = samp_clean['sr'], samp_clean['data']
         noise = additive_noise(clean, samp_noise['data'], snr=snr)
 
         if snr == -np.inf:  # only output noise to simulate negative infinity
@@ -122,11 +131,13 @@ class Additive(SEDataset):
         else:
             chan1 = clean + noise
 
-        sample = {'sr': samp_clean['sr'],
-                  'chan1': chan1,
-                  'clean': clean,
-                  'noise': noise,
+        sample = {'chan1': {'sr': sr, 'data': chan1},
+                  'clean': {'sr': sr, 'data': clean},
+                  'noise': {'sr': sr, 'data': noise},
                   'snr': snr
                   }
+
+        if self.transform:
+            sample = self.transform(sample)
 
         return sample
