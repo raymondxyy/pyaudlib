@@ -107,81 +107,63 @@ class FinalTransform(object):
 # Collate functions below
 
 
-def my_collate_fn(batch):
-    # TODO: Need to work on docstring.
-    '''
-    sort sequences and seq_lengths in the batch according to sequence length
-    sort inputs, outputs and label_lengths in the batch according to character level length
-    give character level length sorting index to resort the sequence after unpacked in decoder
+def sort_by_feat_length_collate_fn(batch):
+    """
+    sort batch data according to feature length
 
-    B for batchsize, S for sequence length (frames), D for dimension (of frequency), L for character level length
+    B for batch_size, F for feature length (frames), D for dimension (of
+        frequency), L for character level length
 
-    sorted according to sequence length:
-    seq_sorted [B, S, D]
-    length_sorted [B]
+    feats [B, S, D]
+    feat_lengths [B]
+    inputs [B, L]
+    outputs [B, L]
+    label_lengths [B]
+    """
 
-    sorted according to character level length (label_length):
-    inputs_sorted [B, L]
-    outputs_concat [sum of valid label length]
-    label_length_sorted [B]
-    lbl_perm_idx [B]
-    '''
+    # TODO: sort in collate_fn instead of network!!!
+    
     batch_size = len(batch)
 
     max_len = 0
     max_output_len = 0
     sum_output_len = 0
-    for sequence, input, output in batch:
-        # REVIEW: @Raymond changed the interface here. @Shangwu Make sure this looks good.
-        seq_length, upper_seq_length = len(sequence), len(sequence)
+    for feat, input, output in batch:
+        feat_length = len(feat)
         label_length = len(input)
-        max_len = max(max_len, upper_seq_length)
+        max_len = max(max_len, feat_length)
         max_output_len = max(max_output_len, label_length)
         sum_output_len += label_length
 
-    sequences = None
-    seq_lengths = None
-    inputs = None
-    outputs = None
-    outputs_concat = None
-    label_lengths = None
-    unshuffle_idx = None
     if _use_shared_memory:
-        sequences = torch.FloatStorage._new_shared(
+        feats = torch.FloatStorage._new_shared(
             batch[0][0], batch_size*max_len*40).new(batch_size, max_len, 40).zero_().float()
-        seq_lengths = torch.FloatStorage._new_shared(
+        feat_lengths = torch.FloatStorage._new_shared(
             batch[0][0], batch_size).new(batch_size,).zero_().int()
         inputs = torch.FloatStorage._new_shared(
             batch[0][0], batch_size*max_output_len).new(batch_size, max_output_len).zero_().long()
         outputs = torch.FloatStorage._new_shared(
             batch[0][0], batch_size*max_output_len).new(batch_size, max_output_len).zero_().long()
-        outputs_concat = torch.FloatStorage._new_shared(
-            batch[0][0], sum_output_len).new(sum_output_len, ).zero_().long()
         label_lengths = torch.FloatStorage._new_shared(
             batch[0][0], batch_size).new(batch_size,).zero_().int()
-        unshuffle_idx = torch.FloatStorage._new_shared(
-            batch[0][0], batch_size).new(batch_size,).zero_().long()
     else:
-        sequences = batch[0][0].new(batch_size, max_len, 40).zero_().float()
-        seq_lengths = batch[0][0].new(batch_size,).zero_().int()
+        feats = batch[0][0].new(batch_size, max_len, 40).zero_().float()
+        feat_lengths = batch[0][0].new(batch_size,).zero_().int()
         inputs = batch[0][0].new(batch_size, max_output_len).zero_().long()
         outputs = batch[0][0].new(batch_size, max_output_len).zero_().long()
-        outputs_concat = batch[0][0].new(sum_output_len, ).zero_().long()
         label_lengths = batch[0][0].new(batch_size,).zero_().int()
-        unshuffle_idx = batch[0][0].new(batch_size,).zero_().long()
 
     i = 0
-    for sequence, input, output in batch:
-        # REVIEW: @Raymond changed the interface here. @Shangwu Make sure this looks good.
-        seq_length, upper_seq_length = len(sequence), len(sequence)
+    for feat, input, output in batch:
+        feat_length = len(feat)
         label_length = len(input)
-        sequences[i, :seq_length, :] = sequence
+        feats[i, :feat_length, :] = feat
 
         inputs[i, :label_length] = input
         outputs[i, :label_length] = output
 
-        seq_lengths[i] = upper_seq_length  # upper_seq_length
+        feat_lengths[i] = feat_length
         label_lengths[i] = label_length
         i += 1
 
-    return sequences, seq_lengths, inputs, outputs, label_lengths
+    return feats, feat_lengths, inputs, outputs, label_lengths
