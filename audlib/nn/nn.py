@@ -264,7 +264,7 @@ class SequenceShuffle(nn.Module):
 
     @staticmethod
     def concate_sequence(sequence, length):
-        '''pyramid LSTM, merge consecutive time step together'''
+        """pyramid LSTM, merge consecutive time step together"""
         shape = sequence.size()
 
         # efficient using indexing, don't need iteration
