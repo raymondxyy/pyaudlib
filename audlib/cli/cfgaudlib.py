@@ -1,7 +1,7 @@
 #!/home/xyy/anaconda3/bin/python
 
-from audlib.cfg import cfgload, cfgstatus, cfgreset, cfgshow
-from audlib.cfg import __active__, __cfgdir__, __cfglist__
+from ..cfg import cfgload, cfgstatus, cfgreset
+from ..cfg import __active__, __cfglist__
 import subprocess
 import os
 import click
@@ -9,7 +9,7 @@ import click
 
 @click.group()
 def cli():
-    """Read or write configurations for pyaudiolib.
+    """Read or write configurations for audlib.
 
     Example:
 
@@ -60,7 +60,3 @@ def load_cmd(cfgname):
     cfgload(cfgname, verbose=True)
     cfgstatus()
     return
-
-
-if __name__ == '__main__':
-    cli()

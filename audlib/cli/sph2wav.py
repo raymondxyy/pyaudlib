@@ -1,14 +1,15 @@
-#!/home/xyy/anaconda3/bin/python
+"""Simple CLI for converting embedded-shorten files to wav."""
+
 import click
 import os
-from audlib.io.audio import sph2wav
-from audlib.io.batch import dir2files
+from ..io.audio import sphereread, audiowrite
+from ..io.batch import dir2files
 
 
 @click.command()
 @click.argument('inpaths', type=click.Path(exists=True), nargs=-1)
 @click.argument('outdir', default='out', type=click.Path(), nargs=1)
-def sph2wav_cmd(inpaths, outdir):
+def sph2wav(inpaths, outdir):
     """Convert a list of (possibly compressed) sphere (.wv*) files to wav."""
     # convert any directory to valid paths to audio if necessary
     supported = ('wv', 'wv1', 'wv2', 'sph')
@@ -47,11 +48,8 @@ def sph2wav_cmd(inpaths, outdir):
             click.echo(
                 'Processing [{}/{}]: [{}]--->[{}]'.format(ii+1, tot, inpath,
                                                           outpath))
-            sph2wav(inpath, outpath)
+            x, xsr = sphereread(inpath)
+            audiowrite(x, xsr, outpath)
         except Exception as e:
             click.echo('Could not open file [{}]: {}'.format(
                 path, e), err=True)
-
-
-if __name__ == '__main__':
-    sph2wav_cmd()
