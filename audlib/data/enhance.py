@@ -7,15 +7,17 @@ import numpy as np
 from ..io.batch import dir2files
 from ..sig.util import additive_noise
 from .dataset import Dataset, SEDataset
-from .util import chk_duration, randread
+from .util import chk_duration, randsel, randread, audioread
 
 
 class RandSample(Dataset):
     """Create a dataset by random sampling of all valid audio files."""
 
     def __init__(self, root, sr=None, mindur_per_file=None,
-                 exts=('.wav', '.sph', '.flac'), sampdur_range=(None, None),
-                 transform=None):
+                 exts=('.wav', '.sph', '.flac'),
+                 sampdur_range=(None, None),
+                 transform=None,
+                 cache=False):
         """Instantiate a random sampling dataset.
 
         Parameters
@@ -35,6 +37,10 @@ class RandSample(Dataset):
             Default to unconstrained lengths.
         transform: callable
             Tranform to be applied on samples.
+        cache: bool
+            Default only stores file paths and portion to read. If True,
+            all signals will be read to memory in one shot, and indexing
+            will be just slicing from the read arrays.
 
         """
         super(RandSample, self).__init__()
@@ -44,10 +50,15 @@ class RandSample(Dataset):
         self.minlen, self.maxlen = sampdur_range
         self.exts = exts
         self.transform = transform
+        self._cached = [] if cache else None
 
         self._all_files = dir2files(
             self.root, lambda path: path.endswith(exts)
             and chk_duration(path, minlen=self.mindur_per_file))
+
+        if cache:
+            for path in self._all_files:
+                self._cached.append(audioread(path, sr=self.sr)[0])
 
     @property
     def all_files(self):
@@ -56,8 +67,16 @@ class RandSample(Dataset):
 
     def __getitem__(self, idx):
         """Get idx-th sample."""
-        data, _ = randread(self.all_files[idx], sr=self.sr,
-                           minlen=self.minlen, maxlen=self.maxlen)
+        if self._cached is not None:
+            maxlen = int(self.maxlen*self.sr) if self.maxlen else None
+            nstart, nend = randsel(self._cached[idx],
+                                   minlen=int(self.minlen*self.sr),
+                                   maxlen=maxlen)
+            data = self._cached[idx][nstart:nend]
+        else:
+            data, _ = randread(self.all_files[idx], sr=self.sr,
+                               minlen=self.minlen, maxlen=self.maxlen)
+
         sample = {'data': data, 'sr': self.sr}
 
         if self.transform:
@@ -111,13 +130,7 @@ class Additive(SEDataset):
         return len(self.targetset)
 
     def __getitem__(self, idx):
-        """Retrieve idx-th sample.
-
-        Exhaust all speech/noise/snr combinations in row-major order:
-        0 --> s[0],n[0],snr[0]
-        1 --> s[0],n[0],snr[1] ...
-        k --> s[0],n[1],snr[0] ...
-        """
+        """Retrieve idx-th sample."""
         samp_clean = self.targetset[idx]
         samp_noise = self.noiseset[randint(0, len(self.noiseset)-1)]
         snr = self.snrs[randint(0, len(self.snrs)-1)]

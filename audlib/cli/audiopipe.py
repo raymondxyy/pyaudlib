@@ -73,16 +73,13 @@ def process_commands(processors):
 @cli.command('open')
 @click.option('-i', '--input', 'paths', type=click.Path(), default=None,
               multiple=True, help='The audio file/directory to open.')
-@click.option('-ext', '--extension', 'ext',
-              default=None,
-              multiple=True, help='Extension to extension-less listing.')
 @click.option('-lst', 'lst', default=None,
               help='Listing file for batch processing.')
 @generator
-def open_cmd(paths, ext, lst):
+def open_cmd(paths, lst):
     """Load one or multiple files or directories for processing."""
-    if ext is None:
-        ext = ('.wav', '.flac', '.sph', '.aiff')
+    # TODO: Will need to move this extension to cfg
+    ext = ('.wav', '.flac', '.sph', '.aiff', '.wv1', '.wv2')
     if len(paths) > 0:  # convert any directory to valid paths to audio
         ppaths = []
         for path in paths:

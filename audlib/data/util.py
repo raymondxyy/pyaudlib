@@ -38,12 +38,12 @@ def chk_duration(fpath, minlen=None, maxlen=None):
     return True
 
 
-def randsel(fpath, minlen=None, maxlen=None):
+def randsel(audobj, minlen=0, maxlen=None):
     """Randomly select a portion of audio from path.
 
     Parameters
     ----------
-    fpath: str
+    audobj: str
         file path to audio
     [minlen]: float
         minimum length of selection in seconds
@@ -56,20 +56,22 @@ def randsel(fpath, minlen=None, maxlen=None):
         integer index of selection
 
     """
-    info = audioinfo(fpath)
-    sr, sigsize = info.samplerate, info.frames
-    if minlen is not None:
-        assert sigsize/sr >= minlen, "Audio duration not longer than `minlen`."
-
-    if minlen is None:
-        minoffset = 0
-    else:
+    if type(audobj) is str:
+        info = audioinfo(audobj)
+        sr, sigsize = info.samplerate, info.frames
         minoffset = int(minlen*sr)
-        assert minoffset < sigsize, "`minlen` exceeding total length!"
-    if maxlen is None:
-        maxoffset = sigsize
+        maxoffset = int(maxlen*sr) if maxlen else sigsize
+    elif type(audobj) is np.ndarray:
+        sigsize = len(audobj)
+        minoffset = int(minlen)
+        maxoffset = int(maxlen) if maxlen else sigsize
     else:
-        maxoffset = int(maxlen*sr)
+        raise NotImplementedError
+
+    assert (minoffset < maxoffset) and (minoffset < sigsize), \
+        f"""siglen={sigsize}, minlen = {minoffset}, maxlen = {maxoffset}
+            is bad specification."""
+
     # Select begin sample
     tstart = randrange(max(1, sigsize-minoffset))
     tend = randrange(tstart+minoffset, min(tstart+maxoffset, sigsize))
