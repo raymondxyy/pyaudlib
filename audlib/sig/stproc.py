@@ -14,11 +14,12 @@ import math
 from types import GeneratorType
 
 import numpy as np
+from numpy.lib.stride_tricks import as_strided
 
 from .window import hop2hsize
 
 
-def stcenters(sig, sr, wind, hop, trange=(None, None)):
+def stcenters(sig, sr, wind, hop, synth=False):
     """Calculate window centers for each frame.
 
     See `numframes` for meaning of the parameters.
@@ -26,21 +27,13 @@ def stcenters(sig, sr, wind, hop, trange=(None, None)):
     ssize = len(sig)
     fsize = len(wind)
     hsize = hop2hsize(wind, hop)
-    hfrac = hsize*1. / fsize
-    sstart, send = trange
-    if sstart is None:
-        sstart = int(-fsize * (1-hfrac))
-    else:
-        sstart = int(sstart * sr)
-    if send is None:
-        send = ssize
-    else:
-        send = int(send * sr)
+    sstart = hsize-fsize if synth else 0
+    send = ssize
 
     return (np.arange(sstart, send, hsize) + (fsize-1)/2.) / sr
 
 
-def numframes(sig, sr, wind, hop, trange=(None, None)):
+def numframes(sig, sr, wind, hop, synth=False):
     """Calculate total number of frames.
 
     Use this function to pre-determine the size of stft.
@@ -73,21 +66,13 @@ def numframes(sig, sr, wind, hop, trange=(None, None)):
     ssize = len(sig)
     fsize = len(wind)
     hsize = hop2hsize(wind, hop)
-    hfrac = hsize*1. / fsize
-    sstart, send = trange
-    if sstart is None:
-        sstart = int(-fsize * (1-hfrac))
-    else:
-        sstart = int(sstart * sr)
-    if send is None:
-        send = ssize
-    else:
-        send = int(send * sr)
+    sstart = hsize-fsize if synth else 0
+    send = ssize
 
     return math.ceil((send-sstart)/hsize)
 
 
-def stana(sig, sr, wind, hop, trange=(None, None)):
+def stana(sig, sr, wind, hop, synth=False):
     """[S]hort-[t]ime [Ana]lysis of audio signal.
 
     Analyze a audio/speech-like time series by windowing. Yield each frame on
@@ -121,31 +106,52 @@ def stana(sig, sr, wind, hop, trange=(None, None)):
     ssize = len(sig)
     fsize = len(wind)
     hsize = hop2hsize(wind, hop)
-    hfrac = hsize*1. / fsize
-    sstart, send = trange
-    if sstart is None:
-        sstart = int(-fsize * (1-hfrac))
-    else:
-        sstart = int(sstart * sr)
-    if send is None:
-        send = ssize
-    else:
-        send = int(send * sr)
+    sstart = hsize-fsize if synth else 0  # int(-fsize * (1-hfrac))
+    send = ssize
 
-    for si in range(sstart, send, hsize):
-        sframe = np.zeros(fsize)  # frame buffer to be yielded
+    nframe = math.ceil((send-sstart)/hsize)
+    # Calculate zero-padding sizes
+    zpleft = -sstart
+    zpright = (nframe-1)*hsize+fsize - zpleft - ssize
+    if zpleft > 0 or zpright > 0:
+        sigpad = np.zeros(ssize+zpleft+zpright)
+        sigpad[zpleft:len(sigpad)-zpright] = sig
+    else:
+        sigpad = sig
+
+    std = sig.strides[0]
+    return as_strided(sigpad, shape=(nframe, fsize),
+                      strides=(std*hsize, std)) * wind
+
+    # Below is equivalent and more readable code for reference
+    """
+    frames = np.empty((math.ceil((send-sstart)/hsize), fsize))
+
+    for ii, si in enumerate(range(sstart, send, hsize)):
         sj = si + fsize
-        if sj <= 0:  # do not allow indefinitely outputting 0s
-            continue
 
         if si < 0:  # [0 0 ... x[0] x[1] ...]
-            sframe[-si:] = sig[:sj]
+            frames[ii] = np.pad(sig[:sj], (fsize-sj, 0), 'constant')
         elif sj > ssize:  # [... x[-2] x[-1] 0 0 ... 0]
-            sframe[:ssize-si] = sig[si:]
+            frames[ii] = np.pad(sig[si:], (0, fsize-ssize+si), 'constant')
         else:  # [x[..] ..... x[..]]
-            sframe[:] = sig[si:sj]
+            frames[ii] = sig[si:sj]
 
-        yield sframe*wind
+    return frames * wind
+    """
+
+    # TODO: Generator code needs to move elsewhere
+    """
+    for si in range(sstart, send, hsize):
+        sj = si + fsize
+
+        if si < 0:  # [0 0 ... x[0] x[1] ...]
+            yield wind * np.concatenate((np.zeros(fsize-sj), sig[:sj]))
+        elif sj > ssize:  # [... x[-2] x[-1] 0 0 ... 0]
+            yield wind * np.concatenate((sig[si:], np.zeros(fsize-(ssize-si))))
+        else:  # [x[..] ..... x[..]]
+            yield wind * sig[si:sj]
+    """
 
 
 def ola(sframes, sr, wind, hop):

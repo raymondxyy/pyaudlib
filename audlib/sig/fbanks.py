@@ -160,12 +160,15 @@ class MelFreq(Filterbank):
 
         # Finally, cache values for each filter
         self.filts = []
+        self.wgts = np.zeros((nfft//2+1, nchan))
         for ii in range(self.nchan):
             idx = row == ii
             if unity:
-                self.filts.append((col[idx]+dfl, val[idx]/sum(val[idx])))
+                dftbin, dftwgt = col[idx]+dfl, val[idx]/sum(val[idx])
             else:
-                self.filts.append((col[idx]+dfl, val[idx]))
+                dftbin, dftwgt = col[idx]+dfl, val[idx]
+            self.filts.append((dftbin, dftwgt))
+            self.wgts[dftbin, ii] = dftwgt
 
     def __len__(self):
         """Return the number of frequency channels."""
@@ -189,17 +192,13 @@ class MelFreq(Filterbank):
         dft_sig = rfft(sig, self.nfft)
         return val.dot(dft_sig[dfb])
 
-    def melspec(self, sig):
-        """Return mel log spectrum of a signal."""
-        out = np.zeros(self.nchan)
-        for kk in range(self.nchan):
-            dfb, val = self.filts[kk]
-            out[kk] = val.dot(np.abs(rfft(sig, self.nfft)[dfb])**2)
-        return np.log(out)
+    def melspec(self, powerspec):
+        """Return the mel spectrum of a signal."""
+        return powerspec @ self.wgts
 
-    def mfcc(self, sig):
+    def mfcc(self, powerspec):
         """Return mel-frequency cepstral coefficients (MFCC)."""
-        return dct(self.melspec(sig), norm='ortho')
+        return dct(np.log(self.melspec(powerspec)), norm='ortho')
 
 
 class Gammatone(Filterbank):

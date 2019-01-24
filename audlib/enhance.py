@@ -94,7 +94,7 @@ def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):
 
     # Now perform frame-level Wiener filtering on x
     srec = []
-    for xframe in stana(x, sr, wind, hop):
+    for xframe in stana(x, sr, wind, hop, synth=True):
         xclean, filt, spsd = wiener_iter_frame(xframe)
         srec.append(xclean)
 
@@ -134,7 +134,8 @@ def asnr(x, sr, wind, hop, nfft, noise=None, zphase=True, rule='wiener'):
     vad = []  # holds voice activity decision
     priori_m1 = np.zeros_like(npsd)
     posteri_m1 = np.zeros_like(npsd)
-    for i, xspec in enumerate(stft(x, sr, wind, hop, nfft, zphase=zphase)):
+    for i, xspec in enumerate(stft(x, sr, wind, hop, nfft, synth=True,
+                                   zphase=zphase)):
         xpsd = np.abs(xspec)**2
         posteri = xpsd / npsd
         posteri_prime = np.maximum(posteri - 1, 0)  # half-wave rectify
@@ -278,7 +279,8 @@ def asnr_activate(x, sr, wind, hop, nfft, noise=None, zphase=True,
     posteri_m1 = np.zeros_like(npsd_init)
     priori_m1 = np.zeros_like(npsd_init)
     llkr_m1 = np.zeros_like(npsd_init)
-    for nn, xspec in enumerate(stft(x, sr, wind, hop, nfft, zphase=zphase)):
+    for nn, xspec in enumerate(stft(x, sr, wind, hop, nfft, synth=True,
+                                    zphase=zphase)):
         if nn == 0:  # initial state
             xmag_m1 = np.abs(xspec)
             xpsd_m1 = xmag_m1**2
@@ -376,7 +378,8 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
     posteri_m1 = np.zeros_like(npsd_init)
     priori_m1 = np.zeros_like(npsd_init)
     llkr_m1 = np.zeros_like(npsd_init)
-    for nn, xspec in enumerate(stft(x, sr, wind, hop, nfft, zphase=zphase)):
+    for nn, xspec in enumerate(stft(x, sr, wind, hop, nfft, synth=True,
+                                    zphase=zphase)):
         if nn == 0:
             # inital state
             """
@@ -424,8 +427,9 @@ def asnr_optim(x, t, sr, wind, hop, nfft, noise=None, zphase=True,
         t = t[:siglen]
 
     xfilt = []
-    for xspec, tspec in zip(stft(x, sr, wind, hop, nfft, zphase=zphase),
-                            stft(t, sr, wind, hop, nfft, zphase=zphase)):
+    for xspec, tspec in zip(
+            stft(x, sr, wind, hop, nfft, synth=True, zphase=zphase),
+            stft(t, sr, wind, hop, nfft, synth=True, zphase=zphase)):
         nspec = xspec - tspec
         tpsd = np.abs(tspec) ** 2
         npsd = np.abs(nspec) ** 2

@@ -17,8 +17,8 @@ nfft = 512
 
 def test_stft():
     """Test STFT and iSTFT."""
-    sig_stft = stft(sig, sr, wind, hopfrac, nfft)
-    sigsynth = istft(sig_stft, sr, wind, hopfrac, nfft)
+    sig_stft = stft(sig, sr, wind, hopfrac, nfft, synth=True, zphase=True)
+    sigsynth = istft(sig_stft, sr, wind, hopfrac, nfft, zphase=True)
 
     assert np.allclose(sig, sigsynth[:len(sig)])
 
@@ -59,7 +59,7 @@ def test_cep():
 
 def test_rcep():
     ncep = 500
-    for frame in stana(sig, sr, wind, hopfrac, trange=(.652, None)):
+    for frame in stana(sig[int(.652*sr):], sr, wind, hopfrac):
         cep1 = realcep(frame, ncep)  # log-magnitude method
         cep2 = realcep(frame, ncep, comp=True, ztrans=True)  # ZT method
         cep3 = realcep(frame, ncep, comp=True)  # complex log method

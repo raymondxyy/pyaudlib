@@ -13,15 +13,14 @@ stproc, fbanks
 import numpy as np
 
 from numpy.fft import rfft, irfft
+from scipy.fftpack import dct
 
 from .stproc import numframes, stana, ola
 from .spectral import logmag, realcep, compcep
 from .auditory import hz2mel, dft2mel
 
 
-# Short-time transforms
-
-def stft(sig, sr, wind, hop, nfft, trange=(None, None), zphase=True):
+def stft(sig, sr, wind, hop, nfft, synth=False, zphase=False):
     """Short-time Fourier Transform.
 
     Implement STFT with the Fourier transform view. See `stana` for meanings
@@ -54,21 +53,17 @@ def stft(sig, sr, wind, hop, nfft, trange=(None, None), zphase=True):
     stproc.stana
 
     """
-    fsize = len(wind)
-    woff = (fsize-(fsize % 2)) // 2
-    zp = np.zeros(nfft-fsize)  # zero padding
-    nframe = numframes(sig, sr, wind, hop, trange=trange)
-    out = np.empty((nframe, nfft//2+1), dtype=np.complex_)
-    for ii, frame in enumerate(stana(sig, sr, wind, hop, trange=trange)):
-        if zphase:
-            out[ii] = rfft(np.concatenate((frame[woff:], zp, frame[:woff])))
-        else:  # conventional linear-phase STFT
-            out[ii] = rfft(np.concatenate((frame, zp)))
-
-    return out
+    frames = stana(sig, sr, wind, hop, synth=synth)
+    if zphase:
+        fsize = len(wind)
+        woff = (fsize-(fsize % 2)) // 2
+        zp = np.zeros((frames.shape[0], nfft-fsize))  # zero padding
+        return rfft(np.hstack((frames[:, woff:], zp, frames[:, :woff])))
+    else:
+        return rfft(frames, n=nfft)
 
 
-def istft(sframes, sr, wind, hop, nfft, zphase=True):
+def istft(sframes, sr, wind, hop, nfft, zphase=False):
     """Inverse Short-time Fourier Transform.
 
     Perform iSTFT by overlap-add. See `ola` for meanings of Parameters for
@@ -109,7 +104,25 @@ def istft(sframes, sr, wind, hop, nfft, zphase=True):
     return ola(np.asarray([idft(frame) for frame in sframes]), sr, wind, hop)
 
 
-def stlogm(sig, sr, wind, hop, nfft, trange=(0, None), floor=-10.):
+def stpowspec(sig, sr, wind, hop, nfft, synth=False):
+    """Short-time power spectrogram."""
+    spec = stft(sig, sr, wind, hop, nfft, synth=synth, zphase=False)
+    return spec.real**2 + spec.imag**2
+
+
+def stmelspec(sig, sr, wind, hop, nfft, melbank, synth=False):
+    """Short-time Mel frequency spectrogram."""
+    return stpowspec(sig, sr, wind, hop, nfft, synth=synth) @ melbank.wgts
+
+
+def stmfcc(sig, sr, wind, hop, nfft, melbank, synth=False):
+    """Short-time Mel frequency ceptrum coefficients."""
+    return dct(
+        np.log(stmelspec(sig, sr, wind, hop, nfft, melbank, synth=synth)),
+        norm='ortho')
+
+
+def stlogm(sig, sr, wind, hop, nfft, synth=False, floor=-10.):
     """Short-time Log Magnitude Spectrum.
 
     Implement short-time log magnitude spectrum. Discrete frequency bins that
@@ -121,11 +134,11 @@ def stlogm(sig, sr, wind, hop, nfft, trange=(0, None), floor=-10.):
     stft
 
     """
-    return logmag(stft(sig, sr, wind, hop, nfft, trange=trange, zphase=False),
+    return logmag(stft(sig, sr, wind, hop, nfft, synth=synth, zphase=False),
                   floor=floor)
 
 
-def strcep(sig, sr, wind, hop, n, trange=(0, None), floor=-10.):
+def strcep(sig, sr, wind, hop, n, synth=False, floor=-10.):
     """Short-time real cepstrum.
 
     Implement short-time (real) cepstrum. Discrete frequency bins that
@@ -136,8 +149,8 @@ def strcep(sig, sr, wind, hop, n, trange=(0, None), floor=-10.):
     ---------
     nfft: int
         DFT size.
-    trange: tuple [(0, None)]
-        time range to be analyzed in seconds.
+    synth: bool
+        Aligned time frames with STFT synthesis.
     floor: float [-10.]
         flooring for log(0)
 
@@ -149,25 +162,25 @@ def strcep(sig, sr, wind, hop, n, trange=(0, None), floor=-10.):
         for dealing with time-aliasing in the quefrency domain.
 
     """
-    nframe = numframes(sig, sr, wind, hop, trange=trange)
+    nframe = numframes(sig, sr, wind, hop, synth=synth)
     out = np.empty((nframe, n))
-    for ii, frame in enumerate(stana(sig, sr, wind, hop, trange=trange)):
+    for ii, frame in enumerate(stana(sig, sr, wind, hop, synth=synth)):
         out[ii] = realcep(frame, n, floor=floor)
 
     return out
 
 
-def stccep(sig, sr, wind, hop, n, trange=(0, None), floor=-10.):
+def stccep(sig, sr, wind, hop, n, synth=False, floor=-10.):
     """Short-time complex cepstrum."""
-    nframe = numframes(sig, sr, wind, hop, trange=trange)
+    nframe = numframes(sig, sr, wind, hop, synth=synth)
     out = np.empty((nframe, n))
-    for ii, frame in enumerate(stana(sig, sr, wind, hop, trange=trange)):
+    for ii, frame in enumerate(stana(sig, sr, wind, hop, synth=synth)):
         out[ii] = compcep(frame, n, floor=floor)
 
     return out
 
 
-def stpsd(sig, sr, wind, hop, nfft, trange=(0, None), nframes=-1):
+def stpsd(sig, sr, wind, hop, nfft, nframes=-1):
     """Estimate PSD by taking average of frames of PSDs (the Welch method).
 
     See `stana` and `stft` for detailed explanation of Parameters.
@@ -181,7 +194,7 @@ def stpsd(sig, sr, wind, hop, nfft, trange=(0, None), nframes=-1):
 
     """
     psd = np.zeros(nfft//2+1)
-    for ii, nframe in enumerate(stft(sig, sr, wind, hop, nfft, trange=trange)):
+    for ii, nframe in enumerate(stft(sig, sr, wind, hop, nfft, synth=False)):
         psd += np.abs(nframe)**2  # collect PSD of all frames
         if (nframes > 0) and (ii+1 == nframes):
             break  # only average 6 frames
@@ -190,10 +203,9 @@ def stpsd(sig, sr, wind, hop, nfft, trange=(0, None), nframes=-1):
 
 
 def cqt(x, fs, fmin=20., fmax=None, bins_per_octave=12, decimate=0):
-    """Implement Judy Brown's Constant Q transform.
-
-    TODO
-    """
+    """Implement Judy Brown's Constant Q transform."""
+    # TODO: Implement the algorithm.
+    raise NotImplementedError
     assert fmin > 0.
 
     if fmax is not None:
@@ -249,6 +261,7 @@ def audspec(pspectrum, nfft=512, sr=16000., nfilts=0, fbtype='mel',
 
 def invaudspec(aspectrum, nfft=512, sr=16000., nfilts=0, fbtype='mel',
                minfrq=0., maxfrq=8000., sumpower=True, bwidth=1.0):
+    # TODO: Either update or remove this.
     if fbtype == 'mel':
         wts, _ = dft2mel(nfft, sr=sr, nfilts=nfilts, width=bwidth,
                          minfrq=minfrq, maxfrq=maxfrq)
@@ -274,6 +287,7 @@ def invaudspec(aspectrum, nfft=512, sr=16000., nfilts=0, fbtype='mel',
 
 
 def invaudspec_mask(aspectrum, weights):
+    # TODO: Either update or remove this.
     energy = np.ones_like(aspectrum).dot(weights)
     mask = aspectrum.dot(weights)
     not_zero_energy = ~(energy == 0)

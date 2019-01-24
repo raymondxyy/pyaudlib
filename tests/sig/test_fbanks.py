@@ -1,15 +1,41 @@
 from audlib.sig.fbanks import MelFreq
 from audlib.io.audio import audioread
 from audlib.plot import cepline
+from audlib.sig.stproc import stana, numframes
+from audlib.sig.window import hamming
 import matplotlib.pyplot as plt
 import numpy as np
+
 sig, sr = audioread('samples/welcome16k.wav')
-nstart = int(sr*0.534)  # Rich Stern uttering 'ee' of 'D'.
-nfft = 512
-dee = sig[nstart:nstart+nfft]
-melbank = MelFreq(sr, nfft, 20)
-ndct = 20
-fig = plt.figure(figsize=(16, 12), dpi=100)
-ax1 = fig.add_subplot(211)
-mfcc_dee = melbank.mfcc(dee)[:ndct]
-cepline(np.arange(ndct), mfcc_dee, ax1)
+
+
+def plot_dee():
+    """Plot cepstrum of Rich Stern uttering 'ee' of D."""
+    nstart = int(sr*0.534)
+    nfft = 512
+    dee = sig[nstart:nstart+nfft]
+    melbank = MelFreq(sr, nfft, 20)
+    ndct = 20
+    fig = plt.figure(figsize=(16, 12), dpi=100)
+    ax1 = fig.add_subplot(211)
+    mfcc_dee = melbank.mfcc(dee)[:ndct]
+    cepline(np.arange(ndct), mfcc_dee, ax1)
+    plt.show()
+
+
+def test_mfcc():
+    nfft = 512
+    nmel = 40
+    melbank = MelFreq(sr, nfft, nmel)
+    window_length = 0.032
+    wind = hamming(int(window_length*sr))
+    hop = .25
+    mfcc = np.empty((numframes(sig, sr, wind, hop), nmel))
+    for ii, frame in enumerate(stana(sig, sr, wind, hop)):
+        mfcc[ii] = melbank.mfcc(frame)
+
+    return mfcc
+
+
+if __name__ == '__main__':
+    test_mfcc()
