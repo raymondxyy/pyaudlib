@@ -173,7 +173,7 @@ def strcep(sig, sr, wind, hop, n, synth=False, floor=-10.):
 def stccep(sig, sr, wind, hop, n, synth=False, floor=-10.):
     """Short-time complex cepstrum."""
     nframe = numframes(sig, sr, wind, hop, synth=synth)
-    out = np.empty((nframe, n))
+    out = np.empty((nframe, 2*n+1))
     for ii, frame in enumerate(stana(sig, sr, wind, hop, synth=synth)):
         out[ii] = compcep(frame, n, floor=floor)
 

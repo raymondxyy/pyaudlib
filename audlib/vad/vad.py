@@ -1,3 +1,4 @@
+# TODO: Needs update.
 # A Voice activity detector based on a-priori SNR estimation
 # Author: Raymond Xia (yangyanx@andrew.cmu.edu)
 
@@ -11,6 +12,7 @@ import numpy as np
 from audlib.sig.time_analysis import *
 from pprint import pprint as pp
 
+# TODO: Move configs to cfg.
 CONFIG_VAD = {
     # STFT Parameters
     'SAMPLE_RATE': 16000,  # in Hz
@@ -91,6 +93,7 @@ def asnr_vad(x, noise=None, vad_threshold=.15, verbose=False):
     return decision
 
 
+# TODO: move this outside to bin/
 ######### Use as standalone application ############
 if __name__ == '__main__':
     import argparse

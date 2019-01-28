@@ -14,7 +14,8 @@ from .filetype import Audio, SIGTYPE, SAVEMODE
 from ..cfg import cfgload
 from ..io.audio import audioread, audiowrite
 from ..io.batch import dir2files
-from ..sig.transform import stccep, stlogm
+from ..sig.transform import stccep, stlogm, stmfcc
+from ..sig.fbanks import MelFreq
 from ..sig.window import hamming
 from ..enhance import wiener_iter, asnr, asnr_recurrent, asnr_activate
 
@@ -28,7 +29,7 @@ _hop = float(_cfg['hop_fraction'])
 _wsize = int(float(_cfg['window_length']) * _sr)
 _wind = hamming(_wsize, _hop)
 _nfft = int(_cfg['nfft'])
-_trange = eval(_cfg['analysis_range'])
+_synth = bool(_cfg['synth'])
 _zphase = bool(_cfg['zphase'])
 _ncep = int(_cfg['ncep'])
 
@@ -180,14 +181,26 @@ def save_cmd(audios, out):
         yield np.save(outpath, np.array(featout))
 
 
-@cli.command('lspec')
+@cli.command('logspec')
 @processor
 def spec_cmd(audios):
     """Compute log magnitude spectrogram of each audio signal."""
     for audio in audios:
-        #click.echo("Computing log |STFT| of [{}]".format(audio.filename))
-        spec = stlogm(audio.sig, _sr, _wind, _hop, _nfft, trange=_trange)
+        spec = stlogm(audio.sig, _sr, _wind, _hop, _nfft, synth=_synth)
         audio.sig = spec
+        yield audio
+
+
+@cli.command('mfcc')
+@click.option('--nmel', type=int, default=40, help='Number of Mel channels.')
+@processor
+def spec_cmd(audios, nmel):
+    """Compute the shor-time MFCC of each audio signal."""
+    melbank = MelFreq(_sr, _nfft, nmel)
+    for audio in audios:
+        mfcc = stmfcc(audio.sig, _sr, _wind, _hop,
+                      _nfft, melbank, synth=_synth)
+        audio.sig = mfcc
         yield audio
 
 
@@ -198,12 +211,23 @@ def spec_cmd(audios):
 def ceps_cmd(audios, cms):
     """Compute complex cepstra of each audio signal."""
     for audio in audios:
-        ceps = np.array(
-            list(stccep(audio.sig, _sr, _wind, _hop, (_ncep//2),
-                        trange=_trange)))
+        ceps = stccep(audio.sig, _sr, _wind, _hop, (_ncep//2),
+                      synth=_synth)
         if cms:
             ceps -= np.mean(ceps, axis=0)
         audio.sig = ceps
+        yield audio
+
+
+@cli.command('plot')
+@processor
+def plot_cmd(audios):
+    """Plot representations of audio using matplotlib."""
+    from audlib.plot import specgram, plt
+    for audio in audios:
+        fig, ax = plt.subplots()
+        specgram(audio.sig, ax)
+        plt.show(fig)
         yield audio
 
 

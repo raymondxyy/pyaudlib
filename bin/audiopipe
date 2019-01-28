@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 
-
 if __name__ == '__main__':
     from audlib.cli.audiopipe import cli
     cli()

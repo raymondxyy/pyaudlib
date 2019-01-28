@@ -1,8 +1,8 @@
 from audlib.sig.fbanks import MelFreq
 from audlib.io.audio import audioread
 from audlib.plot import cepline
-from audlib.sig.stproc import stana, numframes
 from audlib.sig.window import hamming
+from audlib.sig.transform import stmfcc
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -24,16 +24,14 @@ def plot_dee():
 
 
 def test_mfcc():
+    # TODO: need to add proper testing.
     nfft = 512
     nmel = 40
     melbank = MelFreq(sr, nfft, nmel)
     window_length = 0.032
     wind = hamming(int(window_length*sr))
     hop = .25
-    mfcc = np.empty((numframes(sig, sr, wind, hop), nmel))
-    for ii, frame in enumerate(stana(sig, sr, wind, hop)):
-        mfcc[ii] = melbank.mfcc(frame)
-
+    mfcc = stmfcc(sig, sr, wind, hop, nfft, melbank)
     return mfcc
 
 
