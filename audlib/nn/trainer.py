@@ -12,8 +12,6 @@ from audlib.asr.util import levenshtein
 
 class ASRTrainer:
     # TODO: Add docstring.
-    # TODO: Consider refactorizing this class in something like nn/optim.py.
-    # TODO: include dataset in trainer.
     def __init__(self, train_dataloader, valid_dataloader, test_dataloader,
                  args, init_bias, transmap, input_dim, vocab_size):
         self.net = Seq2SeqModel(args, input_dim, vocab_size, init_bias)
@@ -56,11 +54,11 @@ class ASRTrainer:
         print("epoch: {}, loss: {}".format(epoch, loss_print))
 
         # evaluate model
-        evaluation_loss, edit_distance = self.eval_model()
+        evaluation_loss = self.eval_model()
 
         # save parameter
         self.model_param_str = params_str(
-            self.args, loss_print, evaluation_loss, epoch, edit_distance)
+            self.args, loss_print, epoch)
         with open(os.path.join(self.args.output_dir, 'args.txt'), 'a') as f:
             f.write("save as:\n{}".format(self.model_param_str + '.pkl'))
         print("save as:\n{}".format(self.model_param_str + '.pkl'))
@@ -114,15 +112,15 @@ class ASRTrainer:
                 self.args.net_out_prob))
 
     def prepare_evaluation_metrics(self):
-        self.losses = []
-        self.mean_edit_distance1 = 0.
-        self.mean_edit_distance2 = 0.
+        self.eval_losses = []
+        self.eval_ls1 = 0.
+        self.eval_ls2 = 0.
 
     def update_evaluation_metrics(self, logits, label_lengths, outputs,
                                   greedy_res, generated_res):
         # loss
         loss = self.criterion(logits, outputs, label_lengths)
-        self.losses.append(loss.data.cpu().numpy())
+        self.eval_losses.append(loss.data.cpu().numpy())
 
         greedy_str = convert_to_string(greedy_res, self.tmap)
         print("greedy", greedy_res)
@@ -141,17 +139,18 @@ class ASRTrainer:
         ls1 /= len(label_str)
         ls2 /= len(label_str)
 
-        self.mean_edit_distance1 += ls1
-        self.mean_edit_distance2 += ls2
+        self.eval_ls1 += ls1
+        self.eval_ls2 += ls2
 
     def output_evaluation_metrics(self, total_cnt):
-        loss_print = np.asscalar(np.mean(self.losses))
-        self.mean_edit_distance1 /= total_cnt
-        self.mean_edit_distance2 /= total_cnt
+        loss_print = np.asscalar(np.mean(self.eval_losses))
+        self.eval_ls1 /= total_cnt
+        self.eval_ls2 /= total_cnt
         print(
             "edit dist1: {}, edit dist2: {}, validation loss: {}".format(
-                self.mean_edit_distance1, self.mean_edit_distance2,
+                self.eval_ls1, self.eval_ls2,
                 loss_print))
+        return loss_print
 
     def eval_model(self):
         self.net.eval()
@@ -167,7 +166,8 @@ class ASRTrainer:
 
             self.update_evaluation_metrics(greedy_res, generated_res, outputs)
 
-        self.output_evaluation_metrics(total_cnt)
+        evaluation_loss = self.output_evaluation_metrics(total_cnt)
+        return evaluation_loss
 
     def load_model(self, model_dir):
         self.net.load_state_dict(torch.load(model_dir + '.pkl'))
