@@ -17,6 +17,7 @@ from scipy.fftpack import dct
 
 from .stproc import numframes, stana, ola
 from .spectral import logmag, realcep, compcep
+from .temporal import xcorr
 from .auditory import hz2mel, dft2mel
 
 
@@ -102,6 +103,12 @@ def istft(sframes, sr, wind, hop, nfft, zphase=False):
             frame = np.roll(frame, nfft//2)
         return frame
     return ola(np.asarray([idft(frame) for frame in sframes]), sr, wind, hop)
+
+
+def stacf(sig, sr, wind, hop, norm=True, biased=True):
+    """Short-time autocorrelation function."""
+    frames = stana(sig, sr, wind, hop)
+    return np.asarray([xcorr(f, norm=norm, biased=biased) for f in frames])
 
 
 def stpowspec(sig, sr, wind, hop, nfft, synth=False):

@@ -161,7 +161,7 @@ def lpc(frame, order, method='autocorr', levinson=False, out='full',
         return alpha
 
 
-def xcorr(x, y=None, one_side=True):
+def xcorr(x, y=None, norm=False, biased=True):
     r"""Calculate the cross-correlation between x and y.
 
     The cross-correlation is defined as:
@@ -177,6 +177,10 @@ def xcorr(x, y=None, one_side=True):
         Returns one-sided correlation sequence starting at index 0 if
         True, otherwise returns the full sequence. This is only useful
         in the case where y is None.
+    norm: bool
+        If true, divide the entire function by acf[0]/ccf[0].
+    biased: bool
+        If false, scale the entire function by 1/(N-m).
 
     Returns
     -------
@@ -184,12 +188,15 @@ def xcorr(x, y=None, one_side=True):
 
     """
     if y is None:  # auto-correlation mode
-        if one_side:  # return only one side of the symmetric sequence
-            return fftconvolve(x[::-1], x)[len(x)-1:]
-        else:  # return the entire symmetric sequence
-            return fftconvolve(x[::-1], x)
+        xcf = fftconvolve(x[::-1], x)[len(x)-1:]
+        if not biased:
+            xcf /= np.arange(len(xcf), 0, -1)
+        if norm:
+            xcf /= xcf[0]
     else:  # cross-correlation mode
-        return fftconvolve(x[::-1], y)
+        xcf = fftconvolve(x[::-1], y)
+
+    return xcf
 
 
 def lpc2ref(alpha):
