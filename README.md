@@ -1,4 +1,7 @@
 # pyaudlib
+
+[![Build Status](https://travis-ci.com/raymondxyy/pyaudlib.svg?token=xNuzdfgseSXz1yHDnh9L&branch=master)](https://travis-ci.org/raymondxyy/pyaudlib)
+
 > A speech signal processing library in Python with emphasis on deep learning.
 
 pyaudlib (name subject to change) provides a collection of utilities for developing speech-related applications using both signal processing and deep learning. The package offers the following high-level features:
