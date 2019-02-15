@@ -37,32 +37,46 @@ nfft = 512
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     hist_based = HistoPitch(
-        Gammatone(sr, 40, center_frequencies=(150, 6000)), sr, wind, hop)
+        Gammatone(sr, 40, center_frequencies=(150, 6000)), sr, wind, hop, lpc_order=14)
     hist = hist_based.t0hist(sig)
     pest = [sr/np.argmax(frame) for frame in hist]
     fig = plt.figure()
-    ax0 = fig.add_subplot(411)
+    ax0 = fig.add_subplot(611)
     ax0.plot(t, sig)
-    ax1 = fig.add_subplot(412)
+    ax0.set_ylabel("Waveform")
+    ax1 = fig.add_subplot(612)
     # Plot raw pitch estimate
-    tt = np.arange(len(hist))*(hop*window_length)
+    tt = np.arange(len(hist))*hop_length
     ax1.plot(tt, pest)
+    ax1.set_ylabel("Raw pitch")
     # Plot voice decision and pitch contour
-    vp = hist_based.pitchcontour(sig)
-    for ii, (ll, pp) in enumerate(vp):
+    uv1, pitch1 = hist_based.pitchcontour(hist)
+    for ii, (ll, pp) in enumerate(zip(uv1, pitch1)):
         if ll:
             print(f"{pp:.2f}")
         else:
             print("0.00")
-        #if ll:
-        #    time = ii * hop_length
-        #    print(f"Time: [{time:.2f}s], Pitch: [{pp:.2f}Hz]")
-    ax2 = fig.add_subplot(413)
-    ax2.plot(tt, [ll for (ll, _) in vp])
-    ax3 = fig.add_subplot(414)
-    ax3.plot(tt, [pp for (_, pp) in vp])
+
+    pitch2 = hist_based.pitchcontour2(hist, uv1)
+
+    ax2 = fig.add_subplot(613)
+    ax2.plot(tt, uv1)
+    ax2.set_ylabel("Voiced/Unvoiced")
+    ax3 = fig.add_subplot(614)
+    ax3.plot(tt, pitch1)
+    ax3.set_ylabel("Histopitch-1")
+    ax4 = fig.add_subplot(615)
+    ax4.plot(tt, pitch2)
+    ax4.set_ylabel("Histopitch-2")
+    ax5 = fig.add_subplot(616)
+    ax5.plot(tt, hist_based.runningvar(uv1, pitch2))
+    ax5.set_ylabel("H2 Running-Var")
+    ax5.set_xlabel("Time (s)")
     fig2 = plt.figure()
     ax = fig2.add_subplot(111)
     from audlib.plot import specgram
     specgram(hist, ax)
+    ax.set_title("T0 Histogram")
+    ax.set_xlabel("Time (s)")
+    ax.set_ylabel("Lag")
     plt.show()

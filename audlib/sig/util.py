@@ -49,10 +49,10 @@ def iirfreqz(h, nfft, ceiling=FREQZ_CEILING):
     return ww, hh
 
 
-def freqz(numerator, demonimator, nfft, ceiling=FREQZ_CEILING):
+def freqz(b, a, nfft, ceiling=FREQZ_CEILING):
     """Compute the frequency response of a z-transform polynomial."""
-    ww, hh_numer = firfreqz(numerator, nfft)
-    __, hh_denom = iirfreqz(demonimator, nfft, ceiling=ceiling)
+    ww, hh_numer = firfreqz(b, nfft)
+    __, hh_denom = iirfreqz(a, nfft, ceiling=ceiling)
     return ww, hh_numer*hh_denom
 
 

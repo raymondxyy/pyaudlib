@@ -1,8 +1,10 @@
 """Frame-level time-domain processing."""
 
 import numpy as np
-from scipy.linalg import toeplitz, solve_toeplitz, inv
-from scipy.signal import fftconvolve
+from scipy.linalg import toeplitz, solve_toeplitz, inv, cholesky
+from scipy.signal import fftconvolve, lfilter
+
+from .util import freqz
 
 
 def zcpa(sig, sr, option=None, interp=False, nyquist=True):
@@ -105,62 +107,6 @@ def zcrate(sig, option=None):
     return len(zeroxing(sig, option=option)) / len(sig)
 
 
-def lpc(frame, order, method='autocorr', levinson=False, out='full',
-        force_stable=True):
-    """Linear predictive coding (LPC).
-
-    Parameters
-    ----------
-    frame: ndarray
-        (Usually windowed) time-domain sequence
-    order: int
-        LPC order
-    method: str [autocorr]
-        One of 'autocorr','cov','parcor'
-    levinson: bool [False]
-        Use Levinson-Durbin recursion? Only available in 'autocorr'.
-    out: str [full]
-        One of 'full','alpha', where
-            full  - [1, -a1, -a2, ..., -ap]
-            alpha - [a1, a2, ..., ap]
-        'Full' is useful for synthesis; `alpha` is useful to get pole
-        locations.
-
-    Returns
-    -------
-    LPC coefficients as an ndarray.
-
-    """
-    assert order < len(frame)
-    if method == 'autocorr':  # implement autocorrelation method
-        phi = xcorr(frame)
-        if levinson:  # use levinson-durbin recursion
-            try:
-                alpha = solve_toeplitz(phi[:order], phi[1:order+1])
-            except np.linalg.linalg.LinAlgError:
-                print(
-                    "WARNING: singular matrix - adding small value to phi[0]")
-                print(phi[:order])
-                phi[0] += 1e-9
-                alpha = solve_toeplitz(phi[:order], phi[1:order+1])
-        else:  # solve by direct inversion.
-            alpha = inv(toeplitz(phi[:order])).dot(phi[1:order+1])
-        if force_stable and (not lpc_is_stable(alpha)):
-            print("Unstable LPC detected. Reflecting back to unit circle.")
-            alpha = lpc2stable(alpha)
-
-    elif method == 'cov':  # TODO: implement cov and parcor
-        pass
-    elif method == 'parcor':
-        pass
-    else:
-        raise ValueError("Method must be one of [autocorr,cov,parcor].")
-    if out == 'full':
-        return np.insert(-alpha, 0, 1)
-    else:
-        return alpha
-
-
 def xcorr(x, y=None, norm=False, biased=True):
     r"""Calculate the cross-correlation between x and y.
 
@@ -171,7 +117,7 @@ def xcorr(x, y=None, norm=False, biased=True):
     ----------
     x: ndarray
         A time sequence
-    y: ndarray [None]
+    y: ndarray, optional
         Another time sequence; default to x if None.
     one_side: bool
         Returns one-sided correlation sequence starting at index 0 if
@@ -199,6 +145,107 @@ def xcorr(x, y=None, norm=False, biased=True):
     return xcf
 
 
+def lpcerr(sig, alphas, gain=None):
+    """Compute the error signal using LPC coefficents."""
+    a = gain if gain is not None else 1
+    b = pred2poly(alphas)
+    return lfilter(b, a, sig)
+
+
+def lpcspec(alphas, nfft, gain=None):
+    """Compute magnitude spectrum envelope using LPC coefficents."""
+    b = gain if gain is not None else 1
+    a = pred2poly(alphas)
+    ww, hh = freqz(b, a, nfft)
+    return ww, np.abs(hh)
+
+
+def lpc_atc(sig, order, levinson=True, stable=True):
+    """Linear predictive coding using the autocorrelation method.
+
+    Parameters
+    ----------
+    sig: array_like
+        (Usually windowed) time-domain sequence.
+    order: int
+        LPC order.
+    levinson: bool, optional
+        Use Levinson-Durbin recursion? Default to True.
+    stable: bool, optional
+        Enforce stability for pole locations? Default to True.
+
+    Returns
+    -------
+    alphas: numpy.ndarray
+        `order`-point LPC coefficients: [a1, a2, ..., ap].
+        The all-pole filter can be reconstructed from the diff eq:
+            y[n] = G*x[n] + a1*y[n-1] + a2*y[n-2] + ... + ap*y[n-p]
+    gain: float
+        Filter gain.
+
+    """
+    rxx = xcorr(sig)
+    if levinson:  # use levinson-durbin recursion
+        try:
+            alphas = solve_toeplitz(rxx[:order], rxx[1:order+1])
+        except np.linalg.linalg.LinAlgError:
+            print("Singular matrix!! Adding small value to phi[0].")
+            print(rxx[:order])
+            rxx[0] += 1e-9
+            alphas = solve_toeplitz(rxx[:order], rxx[1:order+1])
+    else:  # solve by direct inversion.
+        alphas = inv(toeplitz(rxx[:order])).dot(rxx[1:order+1])
+    if stable and (not lpc_is_stable(alphas)):
+        print("Unstable LPC detected!! Reflecting back to unit circle.")
+        alphas = lpc2stable(alphas)
+
+    gain = np.sqrt(rxx[0] - rxx[1:order+1].dot(alphas))
+
+    return alphas, gain
+
+
+def lpc_cov(sig, order):
+    """Linear predictive coding using the covariance method."""
+    rxx = np.empty((order+1, order+1))
+    sn1 = np.empty_like(sig)
+    sn2 = np.empty_like(sig)
+    slen = len(sig)
+    for kk in range(order+1):
+        sn2[kk:slen] = sig[:slen-kk]
+        for ii in range(order+1):
+            sn1[ii:slen] = sig[:slen-ii]
+            rxx[ii, kk] = sn1.dot(sn2)
+            sn1[:] = 0
+        sn2[:] = 0
+    rinv = inv(cholesky(rxx[1:, 1:]))
+    alphas = (rinv @ rinv.T) @ rxx[1:, 0]
+    gain = np.sqrt(rxx[0, 0] - rxx[0, 1:order+1].dot(alphas))
+
+    return alphas, gain
+
+
+def lpc_parcor(sig, order):
+    """Linear predictive coding using the PARCOR method."""
+    slen = len(sig)
+    bi = np.zeros(slen + order)
+    ei = np.zeros_like(bi)
+    ei[:slen] = sig
+    bi[order:] = sig
+    ks = np.empty(order)  # holds reflection coefficients
+    mse = sig.dot(sig)
+    for ii in range(1, order+1):
+        etmp = ei[:slen+ii]
+        btmp = bi[order-ii:]
+        ks[ii-1] = etmp.dot(btmp) / np.sqrt(ei.dot(ei)*bi.dot(bi))
+        ei[:slen+ii], bi[order-ii:] = \
+            etmp - ks[ii-1] * btmp, btmp - ks[ii-1] * etmp
+        mse *= (1-ks[ii-1]**2)
+
+    gain = np.sqrt(mse)
+
+    return ks, gain
+
+
 def lpc2ref(alpha):
     """Convert a set of LPC alphas to reflection coefficients.
 
@@ -222,8 +269,8 @@ def lpc2ref(alpha):
     return np.diag(a)
 
 
-def ref2lpc(k):
-    """Convert a set of reflection coefficients to LPC coefficients.
+def ref2pred(k):
+    """Convert a set of reflection coefficients to prediction coefficients.
 
     Parameters
     ----------
@@ -272,7 +319,7 @@ def lpc2stable(alpha):
 
 def ref2stable(k):
     """Make reflection coefficients stable."""
-    return lpc2ref(lpc2stable(ref2lpc(k)))
+    return lpc2ref(lpc2stable(ref2pred(k)))
 
 
 def ref_is_stable(k):
@@ -313,3 +360,11 @@ def ref2lar(k):
 def lpc2lar(alpha):
     """Convert a set of LPC coefficients to log area ratio."""
     return ref2lar(lpc2ref(alpha))
+
+
+def pred2poly(alphas):
+    """Convert a set of LPC coefficients to polynomial coefficents."""
+    b = np.empty(len(alphas)+1)
+    b[0] = 1
+    b[1:] = -alphas
+    return b
