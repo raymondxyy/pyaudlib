@@ -218,10 +218,11 @@ class HistoPitch(object):
             while uvdecision[vend] and vend < len(uvdecision):
                 vend += 1
 
-            vs = pitch[vstart:vend]
+            vs = [np.log(p) for p in pitch[vstart:vend]]
             for jj in range(len(vs)):
                 f0mean = sum(vs[:jj+1])/(jj+1)
-                var.append(sum((f0-f0mean)**2 for f0 in vs[:jj+1])/(jj+1))
+                var.append(
+                    np.sqrt(sum((f0-f0mean)**2 for f0 in vs[:jj+1])/(jj+1)))
 
             ii = vend
 
