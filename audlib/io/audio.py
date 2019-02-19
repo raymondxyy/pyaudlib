@@ -121,14 +121,24 @@ def audioread(path, sr=None, start=0, stop=None, force_mono=False,
             print('WARNING: Audio type not supported. Trying sph2pipe...')
         x, xsr = sphereread(path, start=start, stop=stop)
 
-    if force_mono and (len(x.shape) > 1):
-        x = np.sum(x, axis=1)/2.  # stereo->mono
-    if norm:  # normalize maximum absolute amplitude to 1
-        x /= np.max(np.abs(x))
-    if (sr is not None) and (xsr != sr):  # need sample rate conversion
-        x = resample(x, xsr, sr)
-        return x, sr
-    else:
+    if len(x.shape) == 1:  # mono
+        if sr and (xsr != sr):
+            x = resample(x, xsr, sr)
+            xsr = sr
+        if norm:
+            x /= np.max(np.abs(x))
+        return x, xsr
+    else:  # multi-channel
+        x = x.T
+        if sr and (xsr != sr):
+            x = np.asarray([resample(xc, xsr, sr) for xc in x])
+            xsr = sr
+        if force_mono:
+            x = x.sum(axis=1)/x.shape[0]
+        if norm:
+            for chan in range(x.shape[0]):
+                x[chan, :] /= np.max(np.abs(x[chan, :]))
+
         return x, xsr
 
 

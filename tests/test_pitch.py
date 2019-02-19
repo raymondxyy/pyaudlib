@@ -9,7 +9,7 @@ from audlib.pitch import HistoPitch
 from audlib.sig.window import rect
 from audlib.sig.fbanks import Gammatone
 
-TEST_SIGNAL = 'speech'
+TEST_SIGNAL = 'tone'
 
 if TEST_SIGNAL == 'speech':
     sigpath = os.getenv('speech')
@@ -39,25 +39,26 @@ if __name__ == '__main__':
     hist_based = HistoPitch(
         Gammatone(sr, 40, center_frequencies=(150, 6000)), sr, wind, hop, lpc_order=14)
     hist = hist_based.t0hist(sig)
-    pest = [sr/np.argmax(frame) for frame in hist]
     fig = plt.figure()
     ax0 = fig.add_subplot(611)
     ax0.plot(t, sig)
     ax0.set_ylabel("Waveform")
-    ax1 = fig.add_subplot(612)
+
     # Plot raw pitch estimate
     tt = np.arange(len(hist))*hop_length
-    ax1.plot(tt, pest)
-    ax1.set_ylabel("Raw pitch")
     # Plot voice decision and pitch contour
     uv1, pitch1 = hist_based.pitchcontour(hist)
+    rawpitch = [sr/np.argmax(f) if uv1[ii] else 0 for ii, f in enumerate(hist)]
+    ax1 = fig.add_subplot(612)
+    ax1.plot(tt, rawpitch)
+    ax1.set_ylabel("Raw pitch")
     for ii, (ll, pp) in enumerate(zip(uv1, pitch1)):
         if ll:
             print(f"{pp:.2f}")
         else:
             print("0.00")
 
-    pitch2 = hist_based.pitchcontour2(hist, uv1)
+    pitch2 = hist_based.pitchcontour2(hist, uv1, neighbor=.05)
 
     ax2 = fig.add_subplot(613)
     ax2.plot(tt, uv1)

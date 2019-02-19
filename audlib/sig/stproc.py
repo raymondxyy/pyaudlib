@@ -19,7 +19,7 @@ from numpy.lib.stride_tricks import as_strided
 from .window import hop2hsize
 
 
-def stcenters(sig, sr, wind, hop, synth=False):
+def stcenters(sig, sr, wind, hop, synth=False, center=False):
     """Calculate window centers for each frame.
 
     See `numframes` for meaning of the parameters.
@@ -27,13 +27,18 @@ def stcenters(sig, sr, wind, hop, synth=False):
     ssize = len(sig)
     fsize = len(wind)
     hsize = hop2hsize(wind, hop)
-    sstart = hsize-fsize if synth else 0
+    if synth:
+        sstart = hsize-fsize  # int(-fsize * (1-hfrac))
+    elif center:
+        sstart = -int(len(wind)/2)  # odd window centered at exactly n=0
+    else:
+        sstart = 0
     send = ssize
 
     return (np.arange(sstart, send, hsize) + (fsize-1)/2.) / sr
 
 
-def numframes(sig, sr, wind, hop, synth=False):
+def numframes(sig, sr, wind, hop, synth=False, center=False):
     """Calculate total number of frames.
 
     Use this function to pre-determine the size of stft.
@@ -66,17 +71,19 @@ def numframes(sig, sr, wind, hop, synth=False):
     ssize = len(sig)
     fsize = len(wind)
     hsize = hop2hsize(wind, hop)
-    sstart = hsize-fsize if synth else 0
+    if synth:
+        sstart = hsize-fsize  # int(-fsize * (1-hfrac))
+    elif center:
+        sstart = -int(len(wind)/2)  # odd window centered at exactly n=0
+    else:
+        sstart = 0
     send = ssize
 
     return math.ceil((send-sstart)/hsize)
 
 
-def stana(sig, sr, wind, hop, synth=False):
-    """[S]hort-[t]ime [Ana]lysis of audio signal.
-
-    Analyze a audio/speech-like time series by windowing. Yield each frame on
-    demand.
+def stana(sig, sr, wind, hop, synth=False, center=False):
+    """[S]hort-[t]ime [Ana]lysis of audio signal by windowing.
 
     Parameters
     ----------
@@ -88,15 +95,18 @@ def stana(sig, sr, wind, hop, synth=False):
         Window function used for framing. See `window` for window functions.
     hop: float or int
         Hop fraction in (0, 1) or hop size in integers.
-    trange: tuple of float
-        Starting and ending point in seconds.
-        Default to (None, None), which computes a duration that enables
-        perfect reconstruction.
+    synth: bool, optional
+        Whether time-domain synthesis is the end goal.
+        Default to false.
+    center: bool, optional
+        Shift the windowed signal by half a window length if true. This is
+        useful for applications like speech activity detection.
+        Default to false.
 
     Returns
     -------
-    frames: GeneratorType
-        Each iteration yields a short-time frame after windowing.
+    frames: numpy.ndarray
+        Short-time signal after windowing.
 
     See Also
     --------
@@ -106,7 +116,12 @@ def stana(sig, sr, wind, hop, synth=False):
     ssize = len(sig)
     fsize = len(wind)
     hsize = hop2hsize(wind, hop)
-    sstart = hsize-fsize if synth else 0  # int(-fsize * (1-hfrac))
+    if synth:
+        sstart = hsize-fsize  # int(-fsize * (1-hfrac))
+    elif center:
+        sstart = -int(len(wind)/2)  # odd window centered at exactly n=0
+    else:
+        sstart = 0
     send = ssize
 
     nframe = math.ceil((send-sstart)/hsize)
@@ -138,19 +153,6 @@ def stana(sig, sr, wind, hop, synth=False):
             frames[ii] = sig[si:sj]
 
     return frames * wind
-    """
-
-    # TODO: Generator code needs to move elsewhere
-    """
-    for si in range(sstart, send, hsize):
-        sj = si + fsize
-
-        if si < 0:  # [0 0 ... x[0] x[1] ...]
-            yield wind * np.concatenate((np.zeros(fsize-sj), sig[:sj]))
-        elif sj > ssize:  # [... x[-2] x[-1] 0 0 ... 0]
-            yield wind * np.concatenate((sig[si:], np.zeros(fsize-(ssize-si))))
-        else:  # [x[..] ..... x[..]]
-            yield wind * sig[si:sj]
     """
 
 

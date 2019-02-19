@@ -39,7 +39,7 @@ def zcpa(sig, sr, option=None, interp=False, nyquist=True):
     return freq, peak_amp
 
 
-def zeroxing(sig, option=None, interp=False):
+def zeroxing(sig, option=None, sort=True, interp=False):
     """Find all zero-crossing indices in a signal.
 
     Parameters
@@ -49,6 +49,8 @@ def zeroxing(sig, option=None, interp=False):
     option: str, optional
         'up' for upward zero-crossings; 'down' for downward zero-crossings.
         Default to None, which counts both types.
+    sort: bool, optional
+        Sort the zero-crossings by index. Default to true.
     interp: bool
         If True, do linear interpolation to find the fraction zero-crossing.
         Otherwise return integers.
@@ -80,7 +82,11 @@ def zeroxing(sig, option=None, interp=False):
         zc_nonzeros = (mag_n*(zc_nonzeros+1) + mag_np1*zc_nonzeros)\
             / (mag_n + mag_np1)
 
-    return np.sort(np.concatenate((zc_zeros, zc_nonzeros)))
+    res = np.concatenate((zc_zeros, zc_nonzeros))
+    if sort:
+        res = np.sort(res)
+
+    return res
 
 
 def zcrate(sig, option=None):

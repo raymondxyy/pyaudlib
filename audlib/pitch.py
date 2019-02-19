@@ -1,8 +1,8 @@
 """Implementations of Pitch (or sometimes called F0) Tracking."""
+import math
 import numpy as np
 from scipy.signal import lfilter
 
-from .sig.transform import stacf
 from .sig.stproc import numframes, stana
 from .sig.temporal import lpc_parcor, lpcerr, xcorr
 
@@ -36,12 +36,14 @@ class HistoPitch(object):
         super(HistoPitch, self).__init__()
         self.sr = sr
         self.fbank = fbank
-        self.numframes = lambda sig: numframes(sig, sr, wind, hop)
+        self.numframes = lambda sig: numframes(sig, sr, wind, hop, center=True)
         self.laglen = len(wind)
 
         def __stacf(sig):
             """Proceed ACF with LPC."""
-            frames = stana(sig, sr, wind, hop)
+            frames = stana(sig, sr, wind, hop, center=True)
+            if not lpc_order:
+                return np.asarray([xcorr(f, norm=True) for f in frames])
             out = np.empty_like(frames)
             for ii, frame in enumerate(frames):
                 alphas, gain = lpc_parcor(frame, lpc_order)
@@ -49,12 +51,9 @@ class HistoPitch(object):
                 out[ii] = xcorr(xerr, norm=True)
             return out
 
-        if lpc_order:
-            self.stacf = __stacf
-        else:
-            self.stacf = lambda sig: stacf(sig, sr, wind, hop, norm=True)
+        self.stacf = __stacf
 
-    def t0hist(self, sig):
+    def t0hist(self, sig, fmin=40, fmax=400):
         """Compute the fundamental period histogram."""
         # Step 1: bandpass filter signal
         bpsig = (self.fbank.filter(sig, k) for k in range(len(self.fbank)))
@@ -64,7 +63,9 @@ class HistoPitch(object):
 
         # Step 2: autocorrelation, peak detection, and T0 decision
         bpacf = (self.stacf(sig) for sig in lpsig)
-        bpt0 = (self.findt0(acf, minlag=int(self.sr/300)) for acf in bpacf)
+        lmin = int(self.sr/fmax) if fmax else None
+        lmax = math.ceil(self.sr/fmin) if fmin else None
+        bpt0 = (self.findt0(acf, lmin=lmin, lmax=lmax) for acf in bpacf)
 
         # Step 3: initial pitch and voice estimate
         # This is the first time all subband signals are combined.
@@ -75,14 +76,17 @@ class HistoPitch(object):
 
         return t0hist
 
-    def pitchcontour(self, t0hist, neighbor=1, peakpercent=.28, pitchflux=.2):
+    def pitchcontour(self, t0hist, fmin=40, fmax=400, neighbor=.02,
+                     peakpercent=.28, pitchflux=.2):
         """Extract pitch contour of a signal."""
         uv, pitch = [], []
         _voiced, _unvoiced = True, False
+        lmin = int(self.sr/fmax) if fmax else 0
+        lmax = math.ceil(self.sr/fmin) if fmin else t0hist.shape[1]
         for frame in t0hist:
             t0candidate = np.argmax(frame)
-            r1 = max(0, t0candidate-neighbor)
-            r2 = min(len(frame), t0candidate+neighbor+1)
+            r1 = max(lmin, int(t0candidate*(1-neighbor)))
+            r2 = min(lmax, int(t0candidate*(1+neighbor))+1)
             percent = frame[r1:r2].sum() / len(self.fbank)
             label = _voiced if percent > peakpercent else _unvoiced
             uv.append(label)
@@ -182,8 +186,8 @@ class HistoPitch(object):
 
         return uv, pitch
 
-    def pitchcontour2(self, t0hist, uvdecision, neighbor=1):
-        """Alternative method by making use of the original."""
+    def pitchcontour2(self, t0hist, uvdecision, fmin=40, fmax=400, neighbor=.02):
+        """Alternative method by making use of the original U/V decision."""
         pitch = []
         ii = 0
         while ii < len(uvdecision):
@@ -194,10 +198,12 @@ class HistoPitch(object):
             # Process each voiced segment as a whole
             vstart = ii
             vend = ii+1
-            while uvdecision[vend] and vend < len(uvdecision):
+            while vend < len(uvdecision) and uvdecision[vend]:
                 vend += 1
-            t0path = self.bestpath(t0hist[vstart:vend], neighbor=neighbor)
-            pitch.extend([self.sr/t0 for t0 in t0path])
+            t0path = self.bestpath(t0hist[vstart:vend],
+                                   fmin=fmin, fmax=fmax,
+                                   neighbor=neighbor)
+            pitch.extend(self.sr/t0 if t0 > 0 else 0 for t0 in t0path)
             ii = vend
 
         return pitch
@@ -215,7 +221,7 @@ class HistoPitch(object):
             # Process each voiced segment as a whole
             vstart = ii
             vend = ii+1
-            while uvdecision[vend] and vend < len(uvdecision):
+            while vend < len(uvdecision) and uvdecision[vend]:
                 vend += 1
 
             vs = [np.log(p) for p in pitch[vstart:vend]]
@@ -228,25 +234,29 @@ class HistoPitch(object):
 
         return var
 
-    @staticmethod
-    def bestpath(t0hist, neighbor=1):
+    def bestpath(self, t0hist, fmin=None, fmax=None, neighbor=.02):
         """Find the best path in a T0 histogram.
 
         Note that this function assumes `t0hist` is a voiced frame.
         """
+        lmin = int(self.sr/fmax) if fmax else 0
+        lmax = math.ceil(self.sr/fmin) if fmin else t0hist.shape[1]
+
         t0sums = []
         # Each entry is (value, T0, T0_tm1)
-        t0sums.append([(v, t0, None) for t0, v in enumerate(t0hist[0])])
+        t0sums.append([(v if (lmin <= t0 < lmax) else 0, t0, None)
+                       for t0, v in enumerate(t0hist[0])])
         for tt in range(1, len(t0hist)):
             t0sums.append([])
             hist = t0hist[tt]
             for ll in range(len(hist)):
-                rmin = max(0, ll-neighbor)
-                rmax = min(len(hist), ll+neighbor+1)
+                rmin = max(0, int(ll*(1-neighbor)))
+                rmax = min(len(hist), int(ll*(1+neighbor))+1)
                 nbhist = [v for v, _, _ in t0sums[tt-1][rmin:rmax]]
                 max_tm1 = max(nbhist)
                 maxidx_tm1 = nbhist.index(max_tm1) + rmin
-                t0sums[tt].append((max_tm1 + hist[ll], ll, maxidx_tm1))
+                val = hist[ll] if (lmin <= ll < lmax) else 0
+                t0sums[tt].append((max_tm1 + val, ll, maxidx_tm1))
 
         # Backtrack to find full path
         ii = -1
@@ -260,7 +270,7 @@ class HistoPitch(object):
         return bestpath[::-1]
 
     @staticmethod
-    def findt0(stacf, minlag=None, maxlag=None):
+    def findt0(stacf, lmin=None, lmax=None):
         """Find fundamental period T0 given the short-time ACF."""
         def findpeaks(stsig):
             """Extract local maxima location of a short-time signal.
@@ -279,11 +289,11 @@ class HistoPitch(object):
         pkloc = findpeaks(stacf)
 
         # Apply optional mask to control search range
-        if minlag or maxlag:
-            lagmask = np.zeros_like(pkloc)
+        if lmin or lmax:
+            lagmask = np.zeros_like(pkloc, dtype='bool_')
             lagmask[:, 0] = True  # preserve peak at lag=0
-            r1 = max(minlag, 0) if minlag else 0
-            r2 = min(maxlag+1, pkloc.shape[1]) if maxlag else pkloc.shape[1]
+            r1 = max(lmin, 0) if lmin else 0
+            r2 = min(lmax+1, pkloc.shape[1]) if lmax else pkloc.shape[1]
             lagmask[:, r1:r2] = True
             pkloc = np.logical_and(pkloc, lagmask)
         numpeaks = pkloc[:, 1:].sum(axis=1)  # excluding lag=0
