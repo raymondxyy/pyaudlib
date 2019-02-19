@@ -131,10 +131,10 @@ def audioread(path, sr=None, start=0, stop=None, force_mono=False,
     else:  # multi-channel
         x = x.T
         if sr and (xsr != sr):
-            x = np.asarray([resample(xc, xsr, sr) for xc in x])
+            x = resample(x, xsr, sr, axis=1)
             xsr = sr
         if force_mono:
-            x = x.sum(axis=1)/x.shape[0]
+            x = x.sum(axis=0)/x.shape[0]
         if norm:
             for chan in range(x.shape[0]):
                 x[chan, :] /= np.max(np.abs(x[chan, :]))

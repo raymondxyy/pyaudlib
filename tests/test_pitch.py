@@ -9,7 +9,7 @@ from audlib.pitch import HistoPitch
 from audlib.sig.window import rect
 from audlib.sig.fbanks import Gammatone
 
-TEST_SIGNAL = 'tone'
+TEST_SIGNAL = 'speech'
 
 if TEST_SIGNAL == 'speech':
     sigpath = os.getenv('speech')
