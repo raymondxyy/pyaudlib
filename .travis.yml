@@ -7,4 +7,6 @@ python:
 install:
     - pip install pipenv
     - pipenv sync
+before_script:
+    - gcc -o tools/sph2pipe/sph2pipe tools/sph2pipe/*.c -lm
 script: pytest tests/sig
