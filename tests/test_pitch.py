@@ -37,7 +37,7 @@ nfft = 512
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
     hist_based = HistoPitch(
-        Gammatone(sr, 40, center_frequencies=(150, 6000)), sr, wind, hop, lpc_order=14)
+        Gammatone(sr, 40, center_frequencies=(150, 6000)), sr, wind, hop, lpc_order=0)
     hist = hist_based.t0hist(sig)
     fig = plt.figure()
     ax0 = fig.add_subplot(611)
@@ -47,7 +47,7 @@ if __name__ == '__main__':
     # Plot raw pitch estimate
     tt = np.arange(len(hist))*hop_length
     # Plot voice decision and pitch contour
-    uv1, pitch1 = hist_based.pitchcontour(hist)
+    uv1, pitch1 = hist_based.pitchcontour(hist, neighbor=.1)
     rawpitch = [sr/np.argmax(f) if uv1[ii] else 0 for ii, f in enumerate(hist)]
     ax1 = fig.add_subplot(612)
     ax1.plot(tt, rawpitch)
@@ -58,7 +58,7 @@ if __name__ == '__main__':
         else:
             print("0.00")
 
-    pitch2 = hist_based.pitchcontour2(hist, uv1, neighbor=.05)
+    pitch2 = hist_based.pitchcontour2(hist, uv1, neighbor=.1)
 
     ax2 = fig.add_subplot(613)
     ax2.plot(tt, uv1)

@@ -7,6 +7,58 @@ from .sig.stproc import numframes, stana
 from .sig.temporal import lpc_parcor, lpcerr, xcorr
 
 
+class ACF(object):
+    """Pitch detection using the autocorrelation function."""
+
+    def __init__(self, sr, wind, hop, lpc_order=0):
+        """Instantiate a ACF pitch tracker.
+
+        Parameters
+        ----------
+        sr: int
+            Sampling rate.
+        wind: array_like
+            Window function.
+        hop: float/int
+            Hop fraction or samples
+
+        See Also
+        --------
+        sig.fbanks, sig.stproc, sig.window
+
+        """
+        super(ACF, self).__init__()
+        self.sr = sr
+        self.numframes = lambda sig: numframes(sig, sr, wind, hop, center=True)
+        self.laglen = len(wind)
+
+        def __stacf(sig):
+            """Proceed ACF with LPC."""
+            frames = stana(sig, sr, wind, hop, center=True)
+            if not lpc_order:
+                return np.asarray([xcorr(f, norm=True) for f in frames])
+            out = np.empty_like(frames)
+            for ii, frame in enumerate(frames):
+                alphas, gain = lpc_parcor(frame, lpc_order)
+                xerr = lpcerr(frame, alphas, gain=gain)
+                out[ii] = xcorr(xerr, norm=True)
+            return out
+
+        self.stacf = __stacf
+
+    def pitchcontour(self, sig, fmin=40, fmax=400):
+        """Extract pitch contour of a signal."""
+        stacf = self.stacf(sig)
+        lmax = math.ceil(self.sr / fmin) if fmin else math.ceil(self.sr/40)
+        lmin = int(self.sr/fmax) if fmax else int(self.sr/400)
+        pitch = []
+        for acf in stacf:
+            pklag = np.argmax(acf[lmin:lmax])+lmin
+            pitch.append(self.sr/pklag)
+
+        return pitch
+
+
 class HistoPitch(object):
     """This class implements Mike Seltzer's histogram-based pitch tracker.
 

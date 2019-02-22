@@ -1,9 +1,5 @@
 """A collection of recurrent neural networks for processing time series."""
-import numpy as np
 import torch
-from torch.nn.parameter import Parameter
-from torch.autograd import Variable
-from torch.nn import functional as F
 from torch.nn import Module
 import torch.nn as nn
 
@@ -12,7 +8,7 @@ from .util import detach
 
 
 class ARMA(Module):
-    """A RNN mimicking the autoregressive moving averge linear filter."""
+    """A RNN mimicking the AutoRegressive Moving Averge linear filter."""
 
     def __init__(self, indim, arsize, masize, hiddims=[], bias=True):
         """Instantiate an ARMA RNN.
@@ -37,10 +33,10 @@ class ARMA(Module):
         self.arsize = arsize if arsize > 0 else None
         self.masize = masize if masize > 0 else 0
         if self.arsize:
-            self.armlp = MLP(arsize*indim, indim, hiddims=hiddims, bias=bias,
+            self.arnet = MLP(arsize*indim, indim, hiddims=hiddims, bias=bias,
                              activate_hid=nn.Tanh(),
                              activate_out=nn.Tanh())
-        self.mamlp = MLP((self.masize+1)*indim, indim, hiddims=hiddims,
+        self.manet = MLP((self.masize+1)*indim, indim, hiddims=hiddims,
                          bias=bias,
                          activate_hid=nn.Tanh(),
                          activate_out=nn.Tanh())
@@ -80,15 +76,15 @@ class ARMA(Module):
         if x_tm is None and self.masize:
             x_tm = torch.zeros(x_t.size(0), self.masize*self.indim)
 
-        ar = 0 if self.arsize is None else self.armlp(y_tm)
+        ar = 0 if self.arsize is None else self.arnet(y_tm)
 
-        ma = self.mamlp(x_t) if self.masize == 0 else self.mamlp(
+        ma = self.manet(x_t) if self.masize == 0 else self.manet(
             torch.cat((x_tm, x_t), 1))
 
         # might consider more complex combination here
-        return self.activate_out(ma)
+        return self.activate_out(ma+ar)
 
-    def filter(self, x, zi=None, bptt=False):
+    def filter(self, x, zi=None):
         """Filter a signal by the ARMA-RNN.
 
         Parameters
@@ -120,10 +116,10 @@ class ARMA(Module):
                 y_tm = y[:, (tt-self.arsize):tt, :].reshape(
                     (x.size(0), self.arsize*self.indim))
 
-            y[:, tt, :] = self.forward(x[:, tt, :], x_tm, y_tm)
+            y_t = self.forward(x[:, tt, :], x_tm, y_tm)
+            y_t, = detach((y_t,))
 
-            if not bptt:
-                x_tm, y_tm = detach((x_tm, y_tm))
+            y[:, tt, :] = y_t
 
         return y
 
