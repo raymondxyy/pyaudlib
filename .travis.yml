@@ -1,4 +1,6 @@
 # very simple travis file to test how things are going
+env:
+    - PYTHONPATH=`pwd`
 language: python 
 python:
     - "3.6"
