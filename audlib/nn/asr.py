@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 
-from audlib.nn.nn import AdvancedLSTM, AdvancedLSTMCell, PyramidalLSTM, MLP
-from audlib.nn.util import seq_to_nonseq, nonseq_to_seq, output_mask, \
+from .nn import AdvancedLSTM, AdvancedLSTMCell, PyramidalLSTM, MLP
+from .util import seq_to_nonseq, nonseq_to_seq, output_mask, \
     compute_context, gumbel_argmax
 
 
@@ -205,7 +205,7 @@ class DecoderModel(nn.Module):
         generateds = torch.cat(generateds, dim=1)
         return logits, generateds, greedys
 
-    def getInputChar(self, pred, input):
+    def get_input_char(self, pred, input):
         """
         Sample input from prediction of last time step and from ground-truth,
         the probability of choosing ground-truth is given by self.net_out_prob.

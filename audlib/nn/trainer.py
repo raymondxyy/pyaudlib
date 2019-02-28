@@ -4,10 +4,10 @@ import time
 from torch import optim
 import numpy as np
 
-from audlib.nn.asr import Seq2SeqModel
-from audlib.nn.loss import CrossEntropyLossMask
-from audlib.nn.util import save_args, convert_to_string, params_str
-from audlib.asr.util import levenshtein
+from .asr import Seq2SeqModel
+from .loss import CrossEntropyLossMask
+from .util import save_args, convert_to_string, params_str
+from ..asr.util import levenshtein
 
 
 class ASRTrainer:
