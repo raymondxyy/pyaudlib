@@ -274,27 +274,3 @@ class DecoderModel(nn.Module):
 
         return (input_states, query, context), mask
 
-
-class CNN(nn.Module):
-    # TODO: Remove hard-coded parameters and generalize parameters.
-    # TODO: Add docstring.
-    def __init__(self, args, input_dim, output_dim):
-        super(CNN, self).__init__()
-        self.layers = nn.ModuleList()
-        self.layers.append(nn.Conv1d(
-            in_channels=input_dim, out_channels=output_dim, padding=1,
-            kernel_size=3, stride=1))
-        self.layers.append(nn.ReLU())
-        self.layers.append(nn.BatchNorm1d(output_dim))
-        self.layers.append(nn.Dropout(0.1))
-        self.layers.append(nn.Conv1d(
-            in_channels=output_dim, out_channels=output_dim, padding=1,
-            kernel_size=3, stride=1))
-        self.layers.append(nn.ReLU())
-        self.layers.append(nn.BatchNorm1d(output_dim))
-        self.layers.append(nn.Dropout(0.1))
-
-    def forward(self, h):
-        for l in self.layers:
-            h = l(h)
-        return h
