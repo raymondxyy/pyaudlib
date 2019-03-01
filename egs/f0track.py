@@ -102,7 +102,7 @@ if __name__ == '__main__':
     print(arctic)
 
     # Select a sample for demo
-    print(f"Processing [{arctic.all_files[0]}]")
+    print(f"Processing [{arctic.filepaths[0]}]")
     for sig in (arctic[0]['data'], arctic[0]['egg']):
         pitch_demo(sig)
 

@@ -90,7 +90,7 @@ def sample_pair(x, y, length, num, verbose=False):
 
 
 def add_noise(x, n, snr=None):
-    """Add user provided noise n with SNR=snr to signal x."""
+    """Add user provided noise n with SNR=snr and signal x."""
     noise = additive_noise(x, n, snr=snr)
     if snr == -np.inf:
         return noise

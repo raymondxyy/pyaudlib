@@ -15,6 +15,7 @@ import glob
 import os
 
 from .dataset import Dataset, ASRDataset
+from .datatype import Audio, SpeechTranscript
 from ..io.audio import audioread
 
 
@@ -118,11 +119,7 @@ class WSJ(Dataset):
     -------
     A class wsj0 that has the following properties:
         - len(wsj0) == number of usable audio samples
-        - wsj0[idx] == a dict that has the following structure
-        sample: {
-            'sr': sampling rate in int
-            'data': audio waveform (of transform) in numpy.ndarray
-        }
+        - wsj0[idx] == an Audio object
 
     """
 
@@ -134,20 +131,20 @@ class WSJ(Dataset):
         self.transform = transform
         ndxpath = os.path.join(root, ndxpath)
 
-        self._all_files = []  # holds all valid data paths
+        self._filepaths = []  # holds all valid data paths
         if self.train:
             for idxpath in glob.iglob(ndxpath):
-                self._all_files.extend(idx2paths(idxpath, self.root))
+                self._filepaths.extend(idx2paths(idxpath, self.root))
         else:
             for idxpath in glob.iglob(ndxpath):
-                self._all_files.extend(
+                self._filepaths.extend(
                     idx2paths(idxpath, self.root, train=False))
-        self._all_files = list(filter(filt, self._all_files))
+        self._filepaths = list(filter(filt, self._filepaths))
 
     @property
-    def all_files(self):
+    def filepaths(self):
         """Build valid file list."""
-        return self._all_files
+        return self._filepaths
 
     def __str__(self):
         """Print out a summary of instantiated WSJ0."""
@@ -156,7 +153,7 @@ class WSJ(Dataset):
             Total [{}] valid files to be processed.
         """.format(self.__class__.__name__,
                    'Train' if self.train else 'Test',
-                   len(self.all_files))
+                   len(self.filepaths))
 
         return report
 
@@ -168,17 +165,12 @@ class WSJ(Dataset):
 
     def __len__(self):
         """Return number of audio files to be processed."""
-        return len(self.all_files)
+        return len(self.filepaths)
 
     def __getitem__(self, idx):
         """Get the idx-th example from the dataset."""
-        fpath = os.path.join(self.root, self.all_files[idx])
-
-        data, sr = audioread(fpath)
-        sample = {
-            'sr': sr,
-            'data': data
-            }
+        sample = Audio(*audioread(os.path.join(self.root,
+                                               self._filepaths[idx])))
 
         if self.transform:
             sample = self.transform(sample)
@@ -265,10 +257,10 @@ class ASRWSJ(ASRDataset):
 
         if self.verbose:
             print("Preparing valid files.")
-        self._valid_files = []
+        self._filepaths = []
         self.oovs = {}  # holds out-of-vocab words
         self.vocab_hist = [0] * len(self.transmap)
-        for ii, fpath in enumerate(self.dataset.all_files):
+        for ii, fpath in enumerate(self.dataset.filepaths):
             if not ((ii+1) % 1000) and self.verbose:
                 print("Processing [{}/{}] files.".format(
                     ii+1, len(self.dataset)))
@@ -284,7 +276,7 @@ class ASRWSJ(ASRDataset):
                     if "[BAD_RECORDING]" in trans:
                         continue
                     if self.transmap.transcribable(trans):
-                        self._valid_files.append(ii)
+                        self._filepaths.append(ii)
                         # Accumulate vocab stats here
                         for ll in self.transmap.trans2label(trans):
                             self.vocab_hist[ll] += 1
@@ -299,9 +291,9 @@ class ASRWSJ(ASRDataset):
                                 self.oovs[w] = oov[w]
 
     @property
-    def valid_files(self):
+    def filepaths(self):
         """Return valid file index list."""
-        return self._valid_files
+        return self._filepaths
 
     @property
     def transcripts(self):
@@ -318,8 +310,8 @@ class ASRWSJ(ASRDataset):
             \t Some examples: [{}]
         """.format(self.__class__.__name__,
                    'Train' if self.dataset.train else 'Test',
-                   len(self.dataset.all_files), len(
-                       self.valid_files), len(self.oovs),
+                   len(self.dataset.filepaths), len(
+                       self.filepaths), len(self.oovs),
                    ", ".join([e for e in self.oovs][:min(5, len(self.oovs))]))
         return report
 
@@ -330,12 +322,12 @@ class ASRWSJ(ASRDataset):
 
     def __len__(self):
         """Return number of audio files to be processed."""
-        return len(self.valid_files)
+        return len(self.filepaths)
 
     def __getitem__(self, idx):
         """Retrieve the i-th example from the dataset."""
         fpath = os.path.join(
-            self.dataset.root, self.dataset.all_files[self.valid_files[idx]])
+            self.dataset.root, self.dataset.filepaths[self.filepaths[idx]])
 
         # Find corresponding transcript
         cond, sid, uid = fpath.split('/')[-3:]
@@ -345,13 +337,8 @@ class ASRWSJ(ASRDataset):
         # Convert transcript to label sequence
         label = self.transmap.trans2label(trans)
 
-        data, sr = audioread(fpath)
-        sample = {
-            'sr': sr,
-            'data': data,
-            'trans': trans,
-            'label': label
-            }
+        sample = SpeechTranscript(*audioread(fpath),
+                                  transcript=trans, label=label)
 
         if self.dataset.transform:
             sample = self.dataset.transform(sample)

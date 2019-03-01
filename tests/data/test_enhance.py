@@ -1,5 +1,4 @@
 from audlib.data.enhance import RandSample, Additive
-from audlib.sig.transform import stlogm
 from audlib.sig.window import hamming
 
 # Pre-determined transform to be applied on signal
@@ -13,43 +12,20 @@ nfft = 512
 def test_randsamp():
     """Test for random sampling class."""
     wsjspeech = RandSample("/home/xyy/data/wsj0/", sr=sr,
-                           mindur_per_file=3., sampdur_range=(3., 8.),
-                           exts=('.wv1',))
+                           minlen=3., maxlen=8.,
+                           filt=lambda p: p.endswith('.wv1'))
     assert len(wsjspeech) == 34287
-
-    numframes = 0
-    for ii, samp in enumerate(wsjspeech):
-        if not (ii+1 % 10):
-            print(f"Processing [{ii+1}/{len(wsjspeech)}] files.")
-        feat = stlogm(samp['data'], samp['sr'], wind, hopfrac, nfft)
-        numframes += feat.shape[0]
-        if (ii+1) == 100:
-            break
-
-    print(f"Total {numframes} frames of features computed.")
 
 
 def test_additive():
     """Test for additive noise."""
-    wsjspeech = RandSample("/home/xyy/data/wsj0/", sr=sr, mindur_per_file=3.,
-                           sampdur_range=(3., 8.), exts=('.wv1',))
-    noizeus = RandSample("/home/xyy/Documents/MATLAB/loizou/Databases/noise/",
-                         sr=sr, mindur_per_file=3., sampdur_range=(3., None),
-                         cache=True)
+    wsjspeech = RandSample("/home/xyy/data/wsj0/", sr=sr,
+                           minlen=3., maxlen=8.,
+                           filt=lambda p: p.endswith('.wv1'))
+    noizeus = RandSample("/home/xyy/Documents/MATLAB/loizou/Databases/noise16k/",
+                         sr=sr, minlen=3.)
     wsj_noizues = Additive(wsjspeech, noizeus)  # noisy speech dataset
     assert len(wsj_noizues) == len(wsjspeech)
-
-    numframes = 0
-    for ii, samp in enumerate(wsj_noizues):
-        if not (ii+1 % 10):
-            print(f"Processing [{ii+1}/{len(wsj_noizues)}] files.")
-        feat = stlogm(samp['chan1']['data'], samp['chan1']['sr'],
-                      wind, hopfrac, nfft)
-        numframes += feat.shape[0]
-        if (ii+1) == 100:
-            break
-
-    print(f"Total {numframes} frames of features computed.")
 
 
 if __name__ == '__main__':

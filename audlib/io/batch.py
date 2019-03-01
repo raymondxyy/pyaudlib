@@ -1,17 +1,7 @@
-# AudioTransformer Class for easy batch audio I/O
-# Author: Raymond Xia (yangyanx@andrew.cmu.edu)
-#
-# Change Log:
-#   * 2018/1/1:
-#       - Ready for package
-#       - Revised to be compatible with Python 3
-#       - Implemented AudioTransformer with BatchIO
-#       - Documentation added.
+"""Utility functions for batch processing."""
 
-# Misc. libraries
 import os
 import random
-from pdb import set_trace
 
 
 class BatchIO(object):
@@ -75,9 +65,11 @@ class BatchIO(object):
             is_good_format = \
                 lambda fname: fname.lower().endswith(self.__support__)
         if type(self.indir) is list:
-            self.good_paths = dirs2files(self.indir, is_good_format)
+            self.good_paths = []
+            for dd in self.indir:
+                self.good_paths.extend(lsfiles(dd, is_good_format))
         else:
-            self.good_paths = dir2files(self.indir, is_good_format)
+            self.good_paths = lsfiles(self.indir, is_good_format)
 
         if (type(self.indir) is list) and (self.outdir is not None):  # file mode
             assert self.outdir.lower().endswith(self.__support__)
@@ -151,44 +143,50 @@ class BatchIO(object):
                 yield rep_t
 
 
-def dir2files(indir, filter_fn, head_tail=False):
+def genfiles(root, filt=None, relpath=False):
+    """Recursively find all files within a directory and return a generator.
+
+    Parameters
+    ----------
+    root: str
+        Directory to look into.
+    filt: callable, optional
+        Filter function applied to each file path (to keep or discard).
+        Default to None, which accepts all files.
+    relpath: bool, optional
+        Return relative path to `root` instead of full path.
+        Default to False.
+
+    Returns
+    -------
+    type: generator
+        A valid file path is returned on each yield.
+
     """
-    dir2files - Returns a list of files' full paths in `indir` that has qualified
-    properties specified in `filter_fn`.
-    Args:
-        indir     - Input directory/path.
-        filter_fn - filtering function on each file's filename.
-    Returns:
-        flist     - a list of full paths of file names.
-    """
-    indir = os.path.abspath(indir)
-    if os.path.isfile(indir):  # file mode
-        if filter_fn(indir):
-            if head_tail:
-                return [os.path.split(indir)]
-            else:
-                return [indir]
-        else:
-            return []
-    flist = []
-    for root, dirs, files in os.walk(indir):
-        for fname in files:
-            fullpath = os.path.join(root, fname)
-            if not filter_fn(fullpath):
-                continue
-            if head_tail:
-                flist.append((indir, os.path.relpath(fullpath, indir)))
-            else:
-                flist.append(fullpath)
-    return flist
+    root = os.path.abspath(root)
+    if os.path.isfile(root):  # single file mode
+        if (filt is None) or filt(root):
+            yield root
+    else:
+        for rr, dirs, files in os.walk(root):
+            for fname in files:
+                fullpath = os.path.join(rr, fname)
+                if (filt is None) or filt(fullpath):
+                    if relpath:
+                        yield os.path.relpath(fullpath, root)
+                    else:
+                        yield fullpath
 
 
-def dirs2files(indirs, filter_fn, head_tail=False):
-    """Same as dir2file, except allowing more than 1 input directory."""
-    flist = []
-    for indir in indirs:
-        flist.extend(dir2files(indir, filter_fn, head_tail=head_tail))
-    return flist
+def lsfiles(root, filt=None, relpath=False):
+    """Recursively find all files within a directory and return a list.
+
+    See Also
+    --------
+    genfiles
+
+    """
+    return list(genfiles(root, filt=filt, relpath=relpath))
 
 
 def lst2files(lstpath, ext=None):

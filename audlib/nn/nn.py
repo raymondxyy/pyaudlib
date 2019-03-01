@@ -41,7 +41,8 @@ class DetLinear(Module):
 class DetMLP(Module):
     """Detministic multi-Layer Perceptron."""
 
-    def __init__(self, indim, nhidden, bias=True):
+    def __init__(self, indim, nhidden, bias=True,
+                 activate_hid=nn.ReLU(), activate_out=nn.ReLU()):
         """Initialize a deterministic MLP.
 
         Parameters
@@ -64,16 +65,19 @@ class DetMLP(Module):
         else:
             self.nhidden = nhidden
         self.bias = bias
-        self.relu = nn.ReLU()
+        self.activate_hid = activate_hid
+        self.activate_out = activate_out
         self.linears = nn.ModuleList(
             [DetLinear(indim, bias=bias) for ii in range(1 + self.nhidden)]
         )
 
     def forward(self, x):
         """One forward pass."""
-        for layer in self.linears:
-            x = self.relu(layer(x))
-        return x
+        for ii, layer in enumerate(self.linears):
+            if ii == self.nhidden:
+                break
+            x = self.activate_hid(layer(x))
+        return self.activate_out(self.linears[-1](x))
 
     def extra_repr(self):
         """Vebose info."""

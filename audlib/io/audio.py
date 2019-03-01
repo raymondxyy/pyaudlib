@@ -46,6 +46,7 @@ def sphereinfo(path):
 
 class SphereInfo(object):
     """soundfile.info interface for embedded-shorten."""
+    __slots__ = 'samplerate', 'frames'
 
     def __init__(self, path):
         """Read metadata of a sphere file."""
@@ -172,3 +173,66 @@ def audiowrite(data, sr, outpath, norm=True, verbose=False):
     sf.write(outpath, data, sr)
 
     return
+
+
+def chk_duration(path, minlen=None, maxlen=None, unit='second'):
+    """Check if audio from path satisfies duration requirement.
+
+    Parameters
+    ----------
+    path: str
+        File path to audio.
+    minlen: float, optional
+        Inclusive minimum length of selection in seconds or samples.
+        Default to any duration.
+    maxlen: float, optional
+        Exclusive maximum length of selection in seconds or samples.
+        Default to any duration.
+    unit: str, optional
+        The unit in which `minlen` and `maxlen` are interpreted.
+        Options are:
+            - 'second' (default)
+            - 'sample'
+
+    Returns
+    -------
+    okay: bool
+        True if all conditions are satisfied. False otherwise.
+
+    """
+    if (minlen is None) and (maxlen is None):
+        return True
+
+    info = audioinfo(path)
+    sr, sigsize = info.samplerate, info.frames
+    if unit == 'second':
+        minlen = int(minlen * sr) if (minlen is not None) else None
+        maxlen = int(maxlen * sr) if (maxlen is not None) else None
+    if minlen is not None and (sigsize < minlen):
+        return False
+    if maxlen is not None and (sigsize >= maxlen):
+        return False
+
+    return True
+
+
+def shorter_than(path, duration, unit='second'):
+    """Check if audio is shorter than duration in unit."""
+    return chk_duration(path, maxlen=duration, unit=unit)
+
+
+def no_shorter_than(path, duration, unit='second'):
+    """Check if audio is not shorter than duration in unit."""
+    return not shorter_than(path, duration, unit=unit)
+
+
+def longer_than(path, duration, unit='second'):
+    """Check if audio is longer than duration in unit."""
+    if unit == 'sample':
+        duration += 1
+    return chk_duration(path, minlen=duration, unit=unit)
+
+
+def no_longer_than(path, duration, unit='second'):
+    """Check if audio is not longer than duration in unit."""
+    return not longer_than(path, duration, unit=unit)

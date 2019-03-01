@@ -13,7 +13,7 @@ from .cli import processor, generator
 from .filetype import Audio, SIGTYPE, SAVEMODE
 from ..cfg import cfgload
 from ..io.audio import audioread, audiowrite
-from ..io.batch import dir2files
+from ..io.batch import lsfiles
 from ..sig.transform import stccep, stlogm, stmfcc
 from ..sig.fbanks import MelFreq
 from ..sig.window import hamming
@@ -88,7 +88,7 @@ def open_cmd(paths, lst):
             if os.path.isfile(path):
                 ppaths.append(os.path.split(path))
                 continue
-            ppaths.extend(dir2files(path, lambda s: s.endswith(ext), True))
+            ppaths.extend(lsfiles(path, lambda s: s.endswith(ext), True))
 
     if lst is not None:  # Read any lst files
         lpaths = []
@@ -194,7 +194,7 @@ def spec_cmd(audios):
 @cli.command('mfcc')
 @click.option('--nmel', type=int, default=40, help='Number of Mel channels.')
 @processor
-def spec_cmd(audios, nmel):
+def mfcc_cmd(audios, nmel):
     """Compute the shor-time MFCC of each audio signal."""
     melbank = MelFreq(_sr, _nfft, nmel)
     for audio in audios:

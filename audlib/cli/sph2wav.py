@@ -3,7 +3,7 @@
 import click
 import os
 from ..io.audio import sphereread, audiowrite
-from ..io.batch import dir2files
+from ..io.batch import lsfiles
 
 
 @click.command()
@@ -16,8 +16,7 @@ def sph2wav(inpaths, outdir):
     apaths = []
     for path in inpaths:
         if os.path.isdir(path):
-            apaths.extend(
-                dir2files(path, lambda s: s.endswith(supported), True))
+            apaths.extend(lsfiles(path, lambda s: s.endswith(supported), True))
         elif os.path.isfile(path):
             if path.endswith(supported):
                 apaths.append(os.path.split(path))

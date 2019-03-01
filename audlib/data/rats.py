@@ -6,7 +6,8 @@ import os
 import soundfile as sf
 
 from .dataset import SEDataset
-from audlib.io.audio import audioread
+from .datatype import NoisySpeech, Audio
+from ..io.audio import audioread
 
 
 class SERATS_SAD(SEDataset):
@@ -90,7 +91,7 @@ class SERATS_SAD(SEDataset):
         self.select = select
         self.transform = transform
 
-        self._valid_files = []
+        self._filepaths = []
         for chan in self.channels:
             for noisy in glob.iglob(os.path.join(
                     self.noisydir, chan, '*.flac')):
@@ -99,16 +100,20 @@ class SERATS_SAD(SEDataset):
                                                "{}*.flac".format(fid)))[0]
                 vad = glob.glob(os.path.join(self.vaddir,
                                              "{}*.tab".format(fid)))[0]
-                self._valid_files.append((noisy, clean, vad))
+                self._filepaths.append((noisy, clean, vad))
 
     @property
-    def valid_files(self):
+    def filepaths(self):
         """Get all valid files."""
-        return self._valid_files
+        return self._filepaths
+
+    def __len__(self):
+        """Return number of valid file paths."""
+        return len(self._filepaths)
 
     def __getitem__(self, idx):
         """Convert (noisy, clean, vad) paths to features on indexing."""
-        noisy, clean, vad = self.valid_files[idx]
+        noisy, clean, vad = self.filepaths[idx]
         if self.select is not None:
             # Quite a hacky way because noisy and clean have unequal lengths
             if sf.info(noisy).frames > sf.info(clean).frames:
@@ -132,10 +137,8 @@ class SERATS_SAD(SEDataset):
         offset = nstart*1. / sr1
         vadref = tabread(vad)
         vadref = [(ts-offset, te-offset) for ts, te in vadref]
-        sample = {'chan1': {'sr': sr1, 'data': sigx},
-                  'clean': {'sr': sr1, 'data': sigs},
-                  'vad': vadref
-                  }
+        sample = NoisySpeech(noisy=Audio(sigx, sr1),
+                             clean=Audio(sigs, sr2), vad=vadref)
 
         if self.transform:
             sample = self.transform(sample)

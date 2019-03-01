@@ -21,11 +21,15 @@ class ARMA(Module):
             Autoregressive filter tap.
         masize: int
             Moving average filter tap.
-        hiddims: list of int, optional
-            Hidden dimension for the ARMA processing. Default to [], meaning
-            no hidden layers.
+        hiddims: list ofint, optional
+            Hidden dimensions specified in a list. Default to empty list,
+            which means no hidden layers.
         bias: bool, optional
             Enable bias in forward pass. Default to True.
+
+        See Also
+        --------
+        nn.MLP
 
         """
         super(ARMA, self).__init__()
@@ -33,11 +37,10 @@ class ARMA(Module):
         self.arsize = arsize if arsize > 0 else None
         self.masize = masize if masize > 0 else 0
         if self.arsize:
-            self.arnet = MLP(arsize*indim, indim, hiddims=hiddims, bias=bias,
+            self.arnet = MLP(indim*self.arsize, indim, hiddims, bias=bias,
                              activate_hid=nn.Tanh(),
                              activate_out=nn.Tanh())
-        self.manet = MLP((self.masize+1)*indim, indim, hiddims=hiddims,
-                         bias=bias,
+        self.manet = MLP(indim*(self.masize+1), indim, hiddims, bias=bias,
                          activate_hid=nn.Tanh(),
                          activate_out=nn.Tanh())
         # For final combination
@@ -73,7 +76,7 @@ class ARMA(Module):
         """
         if (y_tm is None) and self.arsize:
             y_tm = torch.zeros(x_t.size(0), self.arsize*self.indim)
-        if x_tm is None and self.masize:
+        if (x_tm is None) and self.masize:
             x_tm = torch.zeros(x_t.size(0), self.masize*self.indim)
 
         ar = 0 if self.arsize is None else self.arnet(y_tm)
