@@ -124,7 +124,12 @@ class RandSample(Dataset):
                 self._cached.append(audioread(path, sr=self.sr)[0])
 
             def _randsel(data):
-                return randsel(data, minlen, maxlen, unit='sample')
+                if unit == 'second':
+                    _minlen = int(minlen*sr)
+                    _maxlen = int(maxlen*sr) if maxlen is not None else None
+                else:
+                    _minlen, _maxlen = minlen, maxlen
+                return randsel(data, _minlen, _maxlen, unit='sample')
             self.select = _randsel
         else:
             def _randread(p):
