@@ -13,7 +13,7 @@ from .datatype import AudioPitch
 from ..io.audio import audioread
 
 
-class ARCTIC1(AudioDataset):
+class ARCTIC(AudioDataset):
     """Generic dataset framework CMU_ARCTIC.
 
     The database on disk should have the following structure:
@@ -63,8 +63,8 @@ class ARCTIC1(AudioDataset):
                 out = AudioPitch(sig[0], ssr)
 
             return out
-        super(ARCTIC1, self).__init__(root, filt=filt, read=_audioread,
-                                      transform=transform)
+        super(ARCTIC, self).__init__(root, filt=filt, read=_audioread,
+                                     transform=transform)
         self.sr = sr
 
     def __repr__(self):

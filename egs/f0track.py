@@ -4,11 +4,11 @@ import os
 import matplotlib.pyplot as plt
 import numpy as np
 
-from audlib.data.arctic import ARCTIC
 from audlib.pitch import HistoPitch, ACF
 from audlib.sig.window import rect
 from audlib.sig.fbanks import Gammatone
 from audlib.vad import ZCREnergy
+from audlib.sig.stproc import stcenters
 
 # Configurations for pitch tracker: same as in Mike Seltzer's paper
 SR = 16000
@@ -84,26 +84,20 @@ def pitch_demo(sig):
     fig2 = plt.figure()
     ax = fig2.add_subplot(111)
     from audlib.plot import specgram
-    specgram(hist, ax)
+    specgram(hist, ax, time_axis=stcenters(sig, SR, wind, hop, center=True))
     ax.set_title("T0 Histogram")
     ax.set_xlabel("Time (s)")
     ax.set_ylabel("Lag")
 
 
 if __name__ == '__main__':
-    ARCTIC_ROOT = os.getenv('ARCTIC')
-    if not ARCTIC_ROOT:
-        print("""
-            This script **requires** the CMU_ARCTIC database.
-            Set env with export ARCTIC=/path/to/database to use.
-            """)
+    path = os.getenv('WAV')
+    if path is None:
+        print("Specify WAV with export WAV=/path/to/audio.wav!")
         exit()
-    arctic = ARCTIC(ARCTIC_ROOT, sr=SR, egg=True)
-    print(arctic)
+    from audlib.io.audio import audioread
+    sig, _ = audioread(path, sr=SR)
 
-    # Select a sample for demo
-    print(f"Processing [{arctic.filepaths[0]}]")
-    for sig in (arctic[0]['data'], arctic[0]['egg']):
-        pitch_demo(sig)
+    pitch_demo(sig)
 
     plt.show()

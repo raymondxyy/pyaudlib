@@ -256,6 +256,6 @@ class Gammatone(Filterbank):
             nfft = 1024
         return erb_freqz(*self.filters[k], nfft)
 
-    def filter(self, sig, k):
+    def filter(self, sig, k, cascade=False):
         """Filter signal with k-th channel."""
-        return erb_fbank(sig, *self.filters[k])
+        return erb_fbank(sig, *self.filters[k], cascade=cascade)

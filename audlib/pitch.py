@@ -6,6 +6,8 @@ from scipy.signal import lfilter
 from .sig.stproc import numframes, stana
 from .sig.temporal import lpc_parcor, lpcerr, xcorr
 
+ACF_FLOOR = 1e-4
+
 
 class ACF(object):
     """Pitch detection using the autocorrelation function."""
@@ -66,7 +68,7 @@ class HistoPitch(object):
     original manuscript.
     """
 
-    def __init__(self, fbank, sr, wind, hop, lpc_order=0):
+    def __init__(self, fbank, sr, wind, hop, lpc_order=0, acf_floor=ACF_FLOOR):
         """Instantiate a histogram-based pitch tracker.
 
         Parameters
@@ -79,6 +81,14 @@ class HistoPitch(object):
             Window function.
         hop: float/int
             Hop fraction or samples
+        lpc_order: int, optional
+            Option to extract LPC error signal and extract pitch from there.
+            Default to 0, which means no LPC.
+        acf_floor: float, optional
+            Floor below which the normalized autocorrelation function value
+            will be deemed 0. This value is determined empirically, although
+            it's vital in the peak detection stage.
+            Default to ACF_FLOOR.
 
         See Also
         --------
@@ -90,13 +100,16 @@ class HistoPitch(object):
         self.fbank = fbank
         self.numframes = lambda sig: numframes(sig, sr, wind, hop, center=True)
         self.laglen = len(wind)
+        self.acf_floor = acf_floor
 
         def __stacf(sig):
             """Proceed ACF with LPC."""
             frames = stana(sig, sr, wind, hop, center=True)
-            if not lpc_order:
-                return np.asarray([xcorr(f, norm=True) for f in frames])
             out = np.empty_like(frames)
+            if not lpc_order:
+                for ii, frame in enumerate(frames):
+                    out[ii] = xcorr(frame, norm=True)
+                return out
             for ii, frame in enumerate(frames):
                 alphas, gain = lpc_parcor(frame, lpc_order)
                 xerr = lpcerr(frame, alphas, gain=gain)
@@ -105,19 +118,42 @@ class HistoPitch(object):
 
         self.stacf = __stacf
 
+        b = np.array([2.2189438e-07, 2.6627326e-06,
+                      1.4645029e-05, 4.8816764e-05,
+                      1.0983772e-04, 1.7574035e-04,
+                      2.0503041e-04, 1.7574035e-04,
+                      1.0983772e-04, 4.8816764e-05,
+                      1.4645029e-05, 2.6627326e-06,
+                      2.2189438e-07])
+        a = np.array([1.0000000e+00, -6.8844083e+00,
+                      2.2434055e+01, -4.5510026e+01,
+                      6.3772549e+01, -6.4850120e+01,
+                      4.8964312e+01, -2.7609199e+01,
+                      1.1521776e+01, -3.4661888e+00,
+                      7.1278837e-01, -8.9879358e-02,
+                      5.2513147e-03])
+
+        def __lowpass(sig):
+            """Lowpass filter each bandpass signal."""
+            return lfilter(b, a, sig)
+
+        self.lowpass = __lowpass
+
     def t0hist(self, sig, fmin=40, fmax=400):
         """Compute the fundamental period histogram."""
-        # Step 1: bandpass filter signal
-        bpsig = (self.fbank.filter(sig, k) for k in range(len(self.fbank)))
+        # Step 0.5: Lowpass filter the signal
+        sig = self.lowpass(sig)
 
-        # Step 1.5: lowpass the each bandpass signal
-        lpsig = (self.lowpass(sig) for sig in bpsig)
+        # Step 1: bandpass filter signal
+        bpsig = (self.fbank.filter(sig, k, cascade=False)
+                 for k in range(len(self.fbank)))
 
         # Step 2: autocorrelation, peak detection, and T0 decision
-        bpacf = (self.stacf(sig) for sig in lpsig)
+        bpacf = (self.stacf(sig) for sig in bpsig)
         lmin = int(self.sr/fmax) if fmax else None
         lmax = math.ceil(self.sr/fmin) if fmin else None
-        bpt0 = (self.findt0(acf, lmin=lmin, lmax=lmax) for acf in bpacf)
+        bpt0 = (self.findt0(acf, lmin=lmin, lmax=lmax,
+                            acf_floor=self.acf_floor) for acf in bpacf)
 
         # Step 3: initial pitch and voice estimate
         # This is the first time all subband signals are combined.
@@ -214,6 +250,7 @@ class HistoPitch(object):
 
         # 4.4 Smooth voiced frames
         # ADDED: Smooth voiced frames to prevent jumps
+        """
         vuseglen2 = np.diff(vuseg2 + [len(pitch)])
         label = uv[0]
         ii = 0
@@ -235,22 +272,23 @@ class HistoPitch(object):
                         uv[jj], pitch[jj] = _voiced, (ppre+ppo)/2.
             ii += 1
             label = not label
+        """
 
         return uv, pitch
 
-    def pitchcontour2(self, t0hist, uvdecision, fmin=40, fmax=400, neighbor=.02):
+    def pitchcontour2(self, t0hist, voiced, fmin=40, fmax=400, neighbor=.02):
         """Alternative method by making use of the original U/V decision."""
         pitch = []
         ii = 0
-        while ii < len(uvdecision):
-            if not uvdecision[ii]:
+        while ii < len(voiced):
+            if not voiced[ii]:
                 pitch.append(0)
                 ii += 1
                 continue
             # Process each voiced segment as a whole
             vstart = ii
             vend = ii+1
-            while vend < len(uvdecision) and uvdecision[vend]:
+            while vend < len(voiced) and voiced[vend]:
                 vend += 1
             t0path = self.bestpath(t0hist[vstart:vend],
                                    fmin=fmin, fmax=fmax,
@@ -261,19 +299,19 @@ class HistoPitch(object):
         return pitch
 
     @staticmethod
-    def runningvar(uvdecision, pitch):
+    def runningvar(voiced, pitch):
         """Calculate the running variance of pitch. Presever U/V decisions."""
         var = []
         ii = 0
-        while ii < len(uvdecision):
-            if not uvdecision[ii]:
+        while ii < len(voiced):
+            if not voiced[ii]:
                 var.append(0)
                 ii += 1
                 continue
             # Process each voiced segment as a whole
             vstart = ii
             vend = ii+1
-            while vend < len(uvdecision) and uvdecision[vend]:
+            while vend < len(voiced) and voiced[vend]:
                 vend += 1
 
             vs = [np.log(p) for p in pitch[vstart:vend]]
@@ -322,7 +360,7 @@ class HistoPitch(object):
         return bestpath[::-1]
 
     @staticmethod
-    def findt0(stacf, lmin=None, lmax=None):
+    def findt0(stacf, lmin=0, lmax=None, acf_floor=ACF_FLOOR):
         """Find fundamental period T0 given the short-time ACF."""
         def findpeaks(stsig):
             """Extract local maxima location of a short-time signal.
@@ -336,24 +374,24 @@ class HistoPitch(object):
             nbleft[:, 1:] = stsig[:, :-1]
             nbright = np.zeros_like(stsig)
             nbright[:, :-1] = stsig[:, 1:]
-            return np.logical_and(stsig > nbleft, stsig > nbright)
+            return np.logical_and(
+                stsig > acf_floor,
+                np.logical_and(stsig > nbleft, stsig > nbright))
 
         pkloc = findpeaks(stacf)
 
         # Apply optional mask to control search range
-        if lmin or lmax:
-            lagmask = np.zeros_like(pkloc, dtype='bool_')
-            lagmask[:, 0] = True  # preserve peak at lag=0
-            r1 = max(lmin, 0) if lmin else 0
-            r2 = min(lmax+1, pkloc.shape[1]) if lmax else pkloc.shape[1]
-            lagmask[:, r1:r2] = True
-            pkloc = np.logical_and(pkloc, lagmask)
+        if 0 < lmin < pkloc.shape[1]:
+            pkloc[:, 1:lmin] = False  # preserve peak at lag=0
+        if lmax and (lmax+1 < pkloc.shape[1]):
+            pkloc[:, (lmax+1):] = False
+
         numpeaks = pkloc[:, 1:].sum(axis=1)  # excluding lag=0
 
-        t0 = np.zeros_like(numpeaks)
+        t0 = np.empty_like(numpeaks)
         for ii, (nn, pkframe) in enumerate(zip(numpeaks, pkloc)):
             if nn == 0:
-                continue
+                t0[ii] = 0
             elif nn == 1:
                 t0[ii] = np.argmax(pkframe)
             elif nn == 2:
@@ -369,28 +407,46 @@ class HistoPitch(object):
                         break
                 if jj == len(lags):
                     # No valley; use first max peak
-                    t0[ii] = lags[1]
+                    t0[ii] = lags[1:][np.argmax(lagvals[1:])]
                 else:  # Second peak exists; find max peak after valley
                     t0[ii] = lags[jj:][np.argmax(lagvals[jj:])]
 
         return t0
 
     @staticmethod
-    def lowpass(sig):
-        """Lowpass filter each bandpass signal."""
-        b = np.array([2.2189438e-07, 2.6627326e-06,
-                      1.4645029e-05, 4.8816764e-05,
-                      1.0983772e-04, 1.7574035e-04,
-                      2.0503041e-04, 1.7574035e-04,
-                      1.0983772e-04, 4.8816764e-05,
-                      1.4645029e-05, 2.6627326e-06,
-                      2.2189438e-07])
-        a = np.array([1.0000000e+00, -6.8844083e+00,
-                      2.2434055e+01, -4.5510026e+01,
-                      6.3772549e+01, -6.4850120e+01,
-                      4.8964312e+01, -2.7609199e+01,
-                      1.1521776e+01, -3.4661888e+00,
-                      7.1278837e-01, -8.9879358e-02,
-                      5.2513147e-03])
+    def findt0_v2(stacf, lmin=0, lmax=None, acf_floor=ACF_FLOOR):
+        """Alternative method to find fundamental period."""
 
-        return lfilter(b, a, sig)
+        def findpeaks(sig, imin=0, imax=None, floor=acf_floor):
+            """Find peak location and ampitude of a signal."""
+            ii = 1 if imin <= 1 else imin
+            jj = len(sig)-1 if not imax else imax+1
+            seg = sig[ii:jj]
+            nbl, nbr = sig[ii-1:jj-1], sig[ii+1:jj+1]
+            pkmask = np.logical_and(seg > nbl, seg > nbr)
+            if floor is not None:
+                pkmask = np.logical_and(pkmask, seg > floor)
+            if np.any(pkmask):
+                return np.nonzero(pkmask)[0]+ii, seg[pkmask]
+            else:
+                return (), ()
+
+        def pk2t0(pkloc, pkamp):
+            """Find true T0 candidate given local maxima."""
+            if len(pkloc) == 0:
+                return 0
+            elif len(pkloc) == 1:
+                return pkloc[0]
+            elif len(pkloc) == 2:
+                return pkloc[0] if pkamp[0] > pkamp[1] else pkloc[1]
+            else:  # Find peak in peak contour
+                pvloc, pvamp = findpeaks(-pkamp, floor=None)
+                if len(pvloc) == 0:  # No valley; use first max peak
+                    return pkloc[np.argmax(pkamp)]
+                else:  # Second peak exists; find max peak after valley
+                    vv = pvloc[0]
+                    return pkloc[vv+np.argmax(pkamp[vv:])]
+
+        t0 = np.array([pk2t0(*findpeaks(acf)) for acf in stacf])
+
+        return t0
