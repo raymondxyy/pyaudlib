@@ -1,10 +1,87 @@
 """Frame-level time-domain processing."""
-
+import math
 import numpy as np
+from numpy.lib.stride_tricks import as_strided
 from scipy.linalg import toeplitz, solve_toeplitz, inv, cholesky
 from scipy.signal import fftconvolve, lfilter
 
 from .util import freqz
+
+
+def conv(sig, hr, zphase=False):
+    """Linear convolution.
+
+    This is at the moment a simple wrapper of numpy.convolve.
+
+    Parameters
+    ----------
+    sig: array_like
+        Signal to be processed.
+    hr: array_like
+        Impulse response of the filter.
+    zphase: bool
+        Assume `hr` is centered at time 0? Default to False.
+
+    """
+    if zphase:
+        return np.convolve(sig, hr)[(len(hr)-1)//2:]
+    else:
+        return np.convolve(sig, hr)
+
+
+def convdn(sig, hr, decimate, zphase=False):
+    """Efficient implementation of convolution followed by downsampling.
+
+    Parameters
+    ----------
+    sig: array_like
+        Signal to be processed.
+    hr: array_like
+        Impulse response of the filter.
+    decimate: int
+        Decimation factor.
+        Note that no lowpass filtering is done before decimation.
+    zphase: bool, optional
+        Assume `hr` is centered at time 0? Default to False.
+
+    """
+    if len(sig) < len(hr):
+        sig, hr = hr, sig
+    hsize = len(hr)
+    ssize = len(sig)
+    if zphase:
+        osize = math.ceil((ssize + (hsize - 1)//2)/decimate)
+    else:
+        osize = math.ceil((ssize + hsize - 1)/decimate)
+    # Calculate zero-padding sizes
+    zpleft = (hsize-1)//2 if zphase else hsize-1
+    sigpad = np.zeros((osize-1)*decimate+hsize)
+    zpright = len(sigpad) - zpleft - ssize
+    if zpright < 0:  # happens when decimation factor becomes large
+        sigpad[zpleft:] = sig[:len(sigpad)-zpleft]
+    else:
+        sigpad[zpleft:len(sigpad)-zpright] = sig
+
+    std = sig.strides[0]
+    buf = as_strided(sigpad, shape=(osize, hsize), strides=(std*decimate, std))
+
+    return buf.dot(hr[::-1])
+
+
+def convup(sig, h, interp):
+    """Efficient implementation of upsampling followed by convolution.
+
+    Parameters
+    ----------
+    sig: array_like
+        Signal to be processed.
+    h: array_like
+        Impulse response of the filter.
+    interp: int
+        Interpolation factor.
+
+    """
+    raise NotImplementedError
 
 
 def zcpa(sig, sr, option=None, interp=False, nyquist=True):

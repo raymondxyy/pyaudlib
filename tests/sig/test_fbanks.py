@@ -1,9 +1,9 @@
-from audlib.sig.fbanks import MelFreq
-from audlib.io.audio import audioread
+from audlib.sig.fbanks import MelFreq, ConstantQ
+from audlib.quickstart import welcome
 from audlib.sig.window import hamming
 from audlib.sig.transform import stmfcc
 
-sig, sr = audioread('samples/welcome16k.wav')
+sig, sr = welcome()
 
 
 def test_mfcc():
@@ -18,5 +18,17 @@ def test_mfcc():
     return mfcc
 
 
+def test_cqt():
+    """Test constant Q transform."""
+    nbins_per_octave = 12
+    fmin = 100
+    cqbank = ConstantQ(sr, fmin, bins_per_octave=nbins_per_octave)
+    frate = 100
+    cqt_sig = cqbank.cqt(sig, frate)
+
+    return
+
+
 if __name__ == '__main__':
     test_mfcc()
+    test_cqt()

@@ -209,38 +209,24 @@ def stpsd(sig, sr, wind, hop, nfft, nframes=-1):
     return psd
 
 
-def cqt(x, fs, fmin=20., fmax=None, bins_per_octave=12, decimate=0):
-    """Implement Judy Brown's Constant Q transform."""
-    # TODO: Implement the algorithm.
-    raise NotImplementedError
-    assert fmin > 0.
+def stcqt(sig, fr, cqbank):
+    """Implement Judith Brown's Constant Q transform.
 
-    if fmax is not None:
-        if fmax > fs/2.:
-            print("`fmax` goes beyond Nyquist rate! Set to Nyquist rate.")
-            fmax = fs/2.
-    else:
-        fmax = fs/2.
+    Parameters
+    ----------
+    sig: array_like
+        Signal to be processed.
+    fr: int
+        Frame rate in Hz, or int(SR/hop_length).
+    cqbank: ConstantQ Filterbank class
+        A pre-defined constant Q filterbank class.
 
-    num_octaves = int(np.floor(np.log2(fmax/fmin)))
-    exponents = np.linspace(0, num_octaves, num=bins_per_octave*num_octaves)
+    See Also
+    --------
+    fbank.ConstantQ
 
-    # Calculate center frequencies
-    fc = fmin * (2.**exponents)
-
-    # Calculate quality factor
-    Q = 1. / (2.**(1./bins_per_octave)-1)
-
-    # Calculate the window length for each filterbank
-    Nk = np.round((fs / fc) * Q)
-
-    # Calculate decimation factor
-    # maximum decimation factor for hamming window. Assuming BW=4pi/(N-1)
-    # where N is the window length
-    L = np.floor((Nk[-1]-1)/4)  # pick minimum window length
-    if decimate > L:
-        print("Recommended decimation factor is [{}] or below".format(L))
-        #decimate = L
+    """
+    return cqbank.cqt(sig, fr)
 
 # Legacy functions below
 
