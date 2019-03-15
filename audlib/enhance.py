@@ -10,9 +10,10 @@
 
 import numpy as np
 from numpy.fft import rfft, irfft
+from scipy.special import gammainc
 
 from .sig.stproc import stana, ola
-from .sig.temporal import lpc
+from .sig.temporal import lpc_parcor, ref2pred
 from .sig.transform import stft, istft, stpsd
 from .cfg import cfgload
 
@@ -68,7 +69,8 @@ def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):
 
     def wiener_iter_frame(frame):
         """One frame of Wiener iterative filtering."""
-        xlpc = lpc(frame, _lpc_order, _lpc_method)
+        ref, _ = lpc_parcor(frame, _lpc_order, _lpc_method)
+        xlpc = ref2pred(ref)
         # Get initial PSD estimate
         if zphase:
             frame = np.concatenate((frame[woff:], zp, frame[:woff]))
@@ -89,7 +91,8 @@ def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):
             buff = irfft(xspec)
             if zphase:
                 buff = np.roll(buff, nfft//2)
-            xlpc = lpc(buff, _lpc_order, _lpc_method)
+            ref, _ = lpc_parcor(buff, _lpc_order, _lpc_method)
+            xlpc = ref2pred(ref)
         return buff, filt, spsd
 
     # Now perform frame-level Wiener filtering on x
@@ -168,8 +171,8 @@ def asnr(x, sr, wind, hop, nfft, noise=None, zphase=True, rule='wiener'):
 def asnr_spec(noisyspec, rule='wiener'):
     """Implement the a-priori SNR estimation described by Scalart and Filho.
 
-    This is very similar t `asnr`, except it's computed directly on noisy
-    spectra instead of time-domain signals.
+    This is very similar to `asnr`, except it's computed directly on noisy
+    magnitude spectra instead of time-domain signals.
 
     Outputs
     -------
@@ -416,6 +419,76 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
     return xout
 
 
+def mmse_henriks(sig, sr, wind, hop, nfft, alpha=.98, beta=.8, noise=None,
+                 rule='wiener'):
+    """Implement the MMSE method by Henriks et al for noise PSD estimation.
+
+    Hendriks, R. C., & Tudelft, R. H. (2010). MMSE BASED NOISE PSD TRACKING
+    WITH LOW COMPLEXITY. Computing, (1), 4266–4269.
+    Retrieved from http://cas.et.tudelft.nl/pubs/0004266.pdf
+
+    Parameters
+    ----------
+    sig: array_like
+        Noisy speech signal to be processed.
+    sr: int
+        Sampling rate.
+    wind: array_like
+        Window function for analysis.
+    nfft: int
+        Number of DFT points.
+    alpha: float, optional
+        Recursive averaging coefficient for decision-directed a priori SNR.
+        Default to .98.
+    beta: float, optional
+        Recursive averaging coefficient for noise PSD.
+        Default to .8, as suggested by Henriks et al.
+    noise: array_like, optional
+        Optional examplary noise signal from which noise PSD is extracted.
+    rule: str, optional
+        A priori SNR-to-spectral gain rule. Default to 'wiener'.
+        Options are: wiener, specsub, ml
+
+    See Also
+    --------
+    priori2filt
+
+    """
+    # Estimate noise PSD first;  will be used as Pnn(-1)
+    if noise is None:
+        npsd_init = stpsd(sig, sr, wind, hop, nfft, nframes=6)
+    else:
+        npsd_init = stpsd(noise, sr, wind, hop, nfft)
+
+    sigspec = stft(sig, sr, wind, hop, nfft, synth=True, zphase=True)
+    npsd = np.empty((sigspec.shape[0]+1, len(npsd_init)))
+    priori = np.empty_like(npsd)
+    posteri = np.empty_like(npsd)
+    npsd[0] = npsd_init
+    posteri[0] = 1
+    priori[0] = alpha + (1-alpha)*np.maximum(posteri[0] - 1, 0)
+    for i, pspec in enumerate(sigspec.real**2 + sigspec.imag**2):
+        posteri[i+1] = pspec / npsd[i]
+        priori_hat = np.maximum(posteri[i+1] - 1, 0)  # half-wave rectify
+        npsd_hat = (1/(1+priori_hat)**2
+                    + priori_hat/((1+priori_hat)*posteri[i+1])) * pspec
+        priori[i+1] = alpha*(priori2filt(priori[i], rule)**2) *\
+            posteri[i] + (1-alpha)*priori_hat
+        bias = 1 / ((1+priori[i+1]) * gammainc(2, 1/(1+priori[i+1]))
+                    + np.exp(-1/(1+priori[i+1])))
+        npsd_hat *= bias  # apply correction term to Pnn
+
+        npsd[i+1] = beta * npsd[i] + (1-beta) * npsd_hat
+        if i == sigspec.shape[0]:
+            break
+
+    # Enhance
+    irm = priori2filt(priori[1:], rule)
+    xout = istft(sigspec*irm, sr, wind, hop, nfft, zphase=True)
+
+    return xout, npsd[1:]
+
+
 def asnr_optim(x, t, sr, wind, hop, nfft, noise=None, zphase=True,
                rule='wiener'):
     """Compute oracle mask for magnitude spectrogram."""
@@ -445,7 +518,7 @@ def asnr_optim(x, t, sr, wind, hop, nfft, noise=None, zphase=True,
     return xout
 
 
-def priori2filt(priori, rule):
+def priori2filt(priori, rule='wiener'):
     """Compute filter gains given a priori SNR."""
     if rule == 'wiener':
         return priori / (1+priori)

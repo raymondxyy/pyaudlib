@@ -60,17 +60,19 @@ class AudioDataset(Dataset):
         return path.endswith(('.wav', '.flac', '.sph'))
 
     @staticmethod
-    def audioread(path):
+    def read(path, sr):
         """Read audio and put in an Audio object."""
-        return Audio(*audioread(path))
+        return Audio(*audioread(path, sr=sr))
 
-    def __init__(self, root, filt=None, read=None, transform=None):
+    def __init__(self, root, sr=None, filt=None, read=None, transform=None):
         """Instantiate an audio dataset.
 
         Parameters
         ----------
         root: str
             Root directory of a dataset.
+        sr: int
+            Sampling rate in Hz.
         read: callable, optional
             Function to be called on each file path to get the signal.
             Default to `audioread`.
@@ -89,9 +91,10 @@ class AudioDataset(Dataset):
         """
         super(AudioDataset).__init__()
         self.root = root
+        self.sr = sr
         self._filepaths = lsfiles(root, filt=filt if filt else self.isaudio,
                                   relpath=True)
-        self.read = read if read else self.audioread
+        self.read = read if read else lambda f: self.read(f, sr)
         self.transform = transform
 
     @property
