@@ -1,5 +1,6 @@
 """Some functions to deal with I/O of different audio file formats."""
 
+from random import randrange
 import soundfile as sf
 from resampy import resample
 import numpy as np
@@ -236,3 +237,60 @@ def longer_than(path, duration, unit='second'):
 def no_longer_than(path, duration, unit='second'):
     """Check if audio is not longer than duration in unit."""
     return not longer_than(path, duration, unit=unit)
+
+
+def randsel(path, minlen=0, maxlen=None, unit="second"):
+    """Randomly select a portion of audio from path.
+
+    Parameters
+    ----------
+    path: str
+        File path to audio.
+    minlen: float, optional
+        Inclusive minimum length of selection in seconds or samples.
+    maxlen: float, optional
+        Exclusive maximum length of selection in seconds or samples.
+    unit: str, optional
+        The unit in which `minlen` and `maxlen` are interpreted.
+        Options are:
+            - 'second' (default)
+            - 'sample'
+
+    Returns
+    -------
+    tstart, tend: tuple of int
+        integer index of selection
+
+    """
+    info = audioinfo(path)
+    sr, sigsize = info.samplerate, info.frames
+    if unit == 'second':
+        minoffset = int(minlen*sr)
+        maxoffset = int(maxlen*sr) if maxlen else sigsize
+    else:
+        minoffset = minlen
+        maxoffset = maxlen if maxlen else sigsize
+
+    assert (minoffset < maxoffset) and (minoffset <= sigsize), \
+        f"""BAD: siglen={sigsize}, minlen={minoffset}, maxlen={maxoffset}"""
+
+    # Select begin sample
+    tstart = randrange(max(1, sigsize-minoffset))
+    tend = randrange(tstart+minoffset, min(tstart+maxoffset, sigsize+1))
+
+    return tstart, tend
+
+
+def randread(fpath, minlen=None, maxlen=None, unit='second'):
+    """Randomly read a portion of audio from file."""
+    nstart, nend = randsel(fpath, minlen, maxlen, unit)
+    return audioread(fpath, start=nstart, stop=nend)
+
+
+def fixread(fpath, duration, unit='second'):
+    """Randomly read a fix-length portion of audio from file."""
+    if unit == 'second':  # convert to samples
+        duration = int(duration * audioinfo(fpath).samplerate)
+    nstart, nend = randsel(fpath, minlen=duration, maxlen=duration+1,
+                           unit='sample')
+    return audioread(fpath, start=nstart, stop=nend)

@@ -235,6 +235,10 @@ class ConcatDataset(Dataset):
             sample_idx = idx - self.cumulative_sizes[dataset_idx - 1]
         return self.datasets[dataset_idx][sample_idx]
 
+    def __str__(self):
+        """Print each dataset's string."""
+        return "\n".join(str(dd) for dd in self.datasets)
+
 
 class Subset(Dataset):
     """Subset of a dataset at specified indices."""

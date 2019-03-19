@@ -13,8 +13,20 @@ def pre_emphasis(sig, alpha):
     return lfilter([1, -alpha], 1, sig)
 
 
-def dither(sig, scale):
-    """Dither signal by adding small amount of noise to signal."""
+def dither(sig, norm=False, scale=1e-6):
+    """Dither signal by adding small amount of noise to signal.
+
+    Parameters
+    ----------
+    sig: array_like
+        Signal to be processed.
+    norm: bool, optional
+        Normalize signal amplitude to range [-1, 1] before dithering.
+        Default to no.
+    scale: float, optional
+        Amplitude scale to be applied to Gaussian noise.
+
+    """
     return sig + np.random.randn(*sig.shape)*scale
 
 

@@ -3,7 +3,7 @@ from .dataset import AudioDataset, audioread
 from .datatype import Audio
 
 
-class AudioSpoof(Audio):
+class SpoofedAudio(Audio):
     """A data structure for spoofed audio.
 
     attacktype can only be one of the following:
@@ -14,9 +14,8 @@ class AudioSpoof(Audio):
     """
     __slots__ = "attacktype"
 
-    def __init__(self, signal=None, samplerate=None, genuine=None,
-                 attacktype=None):
-        super(AudioSpoof, self).__init__(signal, samplerate)
+    def __init__(self, signal=None, samplerate=None, attacktype=None):
+        super(SpoofedAudio, self).__init__(signal, samplerate)
         self.attacktype = attacktype
 
 
@@ -95,7 +94,7 @@ class AVSpoof(AudioDataset):
     def isaudio(path):
         return path.endswith('.wav')
 
-    def __init__(self, root, sr=None, filt=None, transform=None):
+    def __init__(self, root, sr=None, filt=None, read=None, transform=None):
         """Instantiate an AVSpoof dataset.
 
         Parameters
@@ -106,7 +105,10 @@ class AVSpoof(AudioDataset):
             Sampling rate in Hz. AVSpoof is recorded at 16kHz.
         filt: callable, optional
             Filters to be applied on each audio path. Default to None.
-        transform: callable(Audio) -> Audio
+        read: callable(str) -> (array_like, int), optional
+            User-defined ways to read in an audio.
+            Returned values are wrapped around an `SpoofedAudio` class.
+        transform: callable(SpoofedAudio) -> SpoofedAudio
             User-defined transformation function.
 
         Returns
@@ -117,23 +119,26 @@ class AVSpoof(AudioDataset):
 
         See Also
         --------
-        dataset.AudioDataset, datatype.Audio
+        SpoofedAudio, dataset.AudioDataset, datatype.Audio
 
         """
-        def read(path):
-            sig, ssr = audioread(path, sr=sr)
-            return AudioSpoof(sig, ssr, attacktype=attack_type(path))
+        def _read(path):
+            if not read:
+                sig, ssr = audioread(path, sr=sr)
+                return SpoofedAudio(sig, ssr, attacktype=attack_type(path))
+            else:
+                sig, ssr = read(path)
+                return SpoofedAudio(sig, ssr, attacktype=attack_type(path))
 
         super(AVSpoof, self).__init__(
             root, filt=self.isaudio if not filt else lambda p:
-                filt(p) and self.isaudio(p),
-            read=read, transform=transform)
+                self.isaudio(p) and filt(p),
+            read=_read, transform=transform)
 
     def __repr__(self):
         """Representation of AVSpoof."""
         return r"""{}({}, sr={}, transform={})
-        """.format(self.__class__.__name__, self.root, self.sr,
-                   self.filt, self.transform)
+        """.format(self.__class__.__name__, self.root, self.sr, self.transform)
 
     def __str__(self):
         """Print out a summary of instantiated dataset."""

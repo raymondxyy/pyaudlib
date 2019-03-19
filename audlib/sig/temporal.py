@@ -220,7 +220,7 @@ def xcorr(x, y=None, norm=False, biased=True):
         xcf = fftconvolve(x[::-1], x)[len(x)-1:]
         if not biased:
             xcf /= np.arange(len(xcf), 0, -1)
-        if norm:
+        if norm and (xcf[0] > 1e-8):  # prevent zero division in silent frames
             xcf /= xcf[0]
     else:  # cross-correlation mode
         xcf = fftconvolve(x[::-1], y)
