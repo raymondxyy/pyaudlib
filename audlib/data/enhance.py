@@ -1,93 +1,37 @@
 """Dataset Classes for Speech Enhancement Applications."""
-
+import os
 from random import randint, randrange
 
-import numpy as np
-
-from ..io.batch import lsfiles
-from ..io.audio import audioinfo, audioread, no_shorter_than
+from ..io.audio import audioread, no_shorter_than, randread
 from ..sig.util import add_noise
-from .dataset import Dataset, SEDataset
+from .dataset import AudioDataset, SEDataset
 from .datatype import Audio, NoisySpeech
 
 
-def randsel(audobj, minlen=0, maxlen=None, unit="second"):
-    """Randomly select a portion of audio from path.
+class RandSample(AudioDataset):
+    """Create a dataset by random sampling of all valid audio files.
 
-    Parameters
-    ----------
-    path: str
-        File path to audio.
-    minlen: float, optional
-        Inclusive minimum length of selection in seconds or samples.
-    maxlen: float, optional
-        Exclusive maximum length of selection in seconds or samples.
-    unit: str, optional
-        The unit in which `minlen` and `maxlen` are interpreted.
-        Options are:
-            - 'second' (default)
-            - 'sample'
-
-    Returns
-    -------
-    tstart, tend: tuple of int
-        integer index of selection
-
+    This class sacrifices flexibility for a simple interface. If it doesn't
+    cover your use case, you can use the more general dataset.AudioDataset.
     """
-    if type(audobj) is np.ndarray:
-        assert unit == "sample", "ndarray does not have sampling rate!"
-        sigsize = len(audobj)
-        minoffset = int(minlen)
-        maxoffset = sigsize if not maxlen else int(maxlen)
-    else:
-        info = audioinfo(audobj)
-        sr, sigsize = info.samplerate, info.frames
-        if unit == 'second':
-            minoffset = int(minlen*sr)
-            maxoffset = int(maxlen*sr) if maxlen else sigsize
-        else:
-            minoffset = minlen
-            maxoffset = maxlen if maxlen else sigsize
-
-    assert (minoffset < maxoffset) and (minoffset < sigsize), \
-        f"""BAD: siglen={sigsize}, minlen={minoffset}, maxlen={maxoffset}"""
-
-    # Select begin sample
-    tstart = randrange(max(1, sigsize-minoffset))
-    tend = randrange(tstart+minoffset, min(tstart+maxoffset, sigsize))
-
-    return tstart, tend
-
-
-def randread(fpath, sr=None, minlen=None, maxlen=None, unit='second'):
-    """Randomly read a portion of audio from file."""
-    nstart, nend = randsel(fpath, minlen, maxlen, unit)
-    return audioread(fpath, sr=sr, start=nstart, stop=nend)
-
-
-class RandSample(Dataset):
-    """Create a dataset by random sampling of all valid audio files."""
 
     @staticmethod
     def isaudio(path):
         return path.endswith(('.wav', '.flac', '.sph'))
 
-    def __init__(self, root, sr=None, filt=None,
-                 minlen=None, maxlen=None,
-                 unit='second',
-                 transform=None,
-                 cache=False):
+    def __init__(self, root, minlen=None, maxlen=None, unit='second',
+                 filt=None, transform=None, cache=False):
         """Instantiate a random sampling dataset.
 
         Parameters
         ----------
         root: str
             Dataset root directory.
-        sr: int, optional
-            Forced sampling rate. Default to None, which accepts any rate.
         filt: callable, optional
             A function to decide if a file path should be accepted or not.
             Default to None, which accepts .wav, .flac, and .sph.
+        read: callabel, optional
+            Function to read in an audio file.
         minlen: float or int, optional
             Minimum duration of each sample in seconds or samples to be read.
             Default to None, which means unconstrained lengths.
@@ -107,56 +51,51 @@ class RandSample(Dataset):
             will be just slicing from the read arrays.
 
         """
-        super(RandSample, self).__init__()
-        self.root = root
-        self.sr = sr
         self.minlen, self.maxlen = minlen, maxlen
         self.unit = unit
         self.transform = transform
-        self._cached = [] if cache else None
 
-        self._filepaths = lsfiles(
-            self.root, lambda p: (filt(p) if filt else self.isaudio(p))
-            and no_shorter_than(p, self.minlen, unit=self.unit))
+        def _filt(path):
+            """Filter based on audio lengths."""
+            if filt:
+                return filt(path) and no_shorter_than(path, minlen, unit)
+            return self.isaudio(path) and no_shorter_than(path, minlen, unit)
 
+        super(RandSample, self).__init__(root, filt=_filt)
+
+        # Not recommended for large files
         if cache:
+            self._cached = []
             for path in self._filepaths:
-                self._cached.append(audioread(path, sr=self.sr)[0])
-
-            def _randsel(data):
-                if unit == 'second':
-                    _minlen = int(minlen*sr)
-                    _maxlen = int(maxlen*sr) if maxlen is not None else None
-                else:
-                    _minlen, _maxlen = minlen, maxlen
-                return randsel(data, _minlen, _maxlen, unit='sample')
-            self.select = _randsel
+                self._cached.append(audioread(path))
         else:
-            def _randread(p):
-                return randread(p, sr, minlen, maxlen, unit)[0]
-            self.read = _randread
-
-    @property
-    def filepaths(self):
-        """Retrieve all file paths."""
-        return self._filepaths
+            self._cached = None
 
     def __getitem__(self, idx):
-        """Get idx-th sample."""
+        """Get idx-th sample, with the option to retreive cached sample."""
         if self._cached is not None:
-            nstart, nend = self.select(self._cached[idx])
-            sample = Audio(self._cached[idx][nstart:nend], self.sr)
+            sig, sr = self._cached[idx]
+            if self.unit == 'second':
+                minoffset = int(self.minlen*sr)
+                maxoffset = int(self.maxlen*sr) if self.maxlen else len(sig)
+            else:
+                minoffset = self.minlen
+                maxoffset = self.maxlen if self.maxlen else len(sig)
+            assert (minoffset < maxoffset) and (minoffset <= len(sig)), \
+                f"""BAD: siglen={len(sig)}, minlen={minoffset},
+                    maxlen={maxoffset}"""
+            nstart = randrange(max(1, len(sig)-minoffset))
+            nend = randrange(nstart+minoffset,
+                             min(nstart+maxoffset, len(sig)+1))
+            sample = Audio(sig[nstart:nend], sr)
         else:
-            sample = Audio(self.read(self.filepaths[idx]), self.sr)
+            pp = os.path.join(self.root, self.filepaths[idx])
+            sample = Audio(*randread(pp, self.minlen, self.maxlen, self.unit))
 
         if self.transform:
             sample = self.transform(sample)
 
         return sample
-
-    def __len__(self):
-        """Return number of samples."""
-        return len(self._filepaths)
 
 
 class Additive(SEDataset):
