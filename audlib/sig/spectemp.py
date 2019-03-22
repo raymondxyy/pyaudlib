@@ -39,7 +39,7 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0):
         This is the prototype filter suggested by Chi et al.
         """
         sx = scale * x
-        return scale * (1-(2**np.pi*sx)**2) * np.exp(-(2*np.pi*sx)**2/2)
+        return scale * (1-(2*np.pi*sx)**2) * np.exp(-(2*np.pi*sx)**2/2)
 
     def _ht(t, rate):
         """Construct a 1-D temporal impulse response with a Gamma function.

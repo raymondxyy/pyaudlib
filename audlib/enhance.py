@@ -423,8 +423,10 @@ def mmse_henriks(sig, sr, wind, hop, nfft, alpha=.98, beta=.8, noise=None,
                  rule='wiener'):
     """Implement the MMSE method by Henriks et al for noise PSD estimation.
 
-    Hendriks, R. C., & Tudelft, R. H. (2010). MMSE BASED NOISE PSD TRACKING
-    WITH LOW COMPLEXITY. Computing, (1), 4266–4269.
+    Hendriks, Richard C., Richard Heusdens, and Jesper Jensen.
+    "MMSE based noise PSD tracking with low complexity."
+    2010 IEEE International Conference on Acoustics, Speech and Signal
+    Processing. IEEE, 2010.
     Retrieved from http://cas.et.tudelft.nl/pubs/0004266.pdf
 
     Parameters
