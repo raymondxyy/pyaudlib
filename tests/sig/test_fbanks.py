@@ -20,7 +20,7 @@ def test_mfcc():
 
 def test_cqt():
     """Test constant Q transform."""
-    nbins_per_octave = 12
+    nbins_per_octave = 32
     fmin = 100
     cqbank = ConstantQ(sr, fmin, bins_per_octave=nbins_per_octave)
     frate = 100

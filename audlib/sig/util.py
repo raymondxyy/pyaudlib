@@ -73,6 +73,11 @@ def nextpow2(n):
     return 1 << (n-1).bit_length()
 
 
+def ispow2(n):
+    """Check if n is an integer power of 2."""
+    return ((n & (n - 1)) == 0) and n != 0
+
+
 def sample(x, length, num, verbose=False):
     """Given audio x, sample `num` segments with `length` samples each."""
     assert len(x) >= length

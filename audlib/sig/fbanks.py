@@ -288,7 +288,7 @@ class ConstantQ(Filterbank):
             Default to yes.
 
         """
-        assert fmin > 0, "Minimum center frequency must be nonzero."
+        assert fmin >= 100, "Small center frequencies are not supported."
         if nchan:  # re-calculate fmax
             self.nchan = nchan
             fmax = fmin * 2**(nchan / bins_per_octave)

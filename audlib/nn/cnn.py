@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch.nn as nn
 
 from .signal import hilbert
+from ..sig.util import nextpow2
 
 
 class STRFConv(nn.Module):
@@ -50,11 +51,20 @@ class STRFConv(nn.Module):
         """
         super(STRFConv, self).__init__()
 
+        # For printing
+        self.__rep = f"""STRF(fr={fr}, bins_per_octave={bins_per_octave},
+            suptime={suptime}, supoct={supoct}, nkern={nkern},
+            rates={rates}, scales={scales}, phis={phis},
+            thetas={thetas})"""
+
         # Determine time & frequency support
         _fsteps = int(supoct * bins_per_octave)  # spectral step on one side
         self.supf = torch.linspace(-supoct, supoct, steps=2*_fsteps+1)
-        self.supt = torch.arange(int(fr*suptime)).type_as(self.supf)/fr
-        self.padding = (0, _fsteps)
+        _tsteps = int(fr*suptime)
+        if _tsteps % 2 == 0:  # force odd number
+            _tsteps += 1
+        self.supt = torch.arange(_tsteps).type_as(self.supf)/fr
+        self.padding = (_tsteps//2, _fsteps)
 
         # Set up learnable parameters
         for param in (rates, scales, phis, thetas):
@@ -123,8 +133,91 @@ class STRFConv(nn.Module):
             Batch of STRF activatations.
 
         """
+        if self.supt.device != sigspec.device:  # for first run
+            self.supt = self.supt.to(sigspec.device)
+            self.supf = self.supf.to(sigspec.device)
         if len(sigspec.shape) == 2:  # expand batch dimension if single eg
             sigspec.unsqueeze_(0)
-        sigspec.unsqueeze_(1)
         strfs = self.strfs().type_as(sigspec).unsqueeze(1).to(sigspec.device)
-        return F.conv2d(sigspec, strfs, padding=self.padding)
+        return F.conv2d(sigspec.unsqueeze(1), strfs, padding=self.padding)
+
+    def __repr__(self):
+        return self.__rep
+
+
+class STRFLayer(nn.Module):
+    """A fully convolutional layer with STRF kernels at the bottom."""
+    def __init__(self, fr, bins_per_octave, suptime, supoct, nkern,
+                 indim, outdim, kernel_size, nchan):
+        """Construct a STRF layer from STRFConv and nonlinearities.
+
+        The layer structure follows this flow:
+        0. N x T x F batch comes in.
+        1. N x K x T x F batch comes out of STRFConv.
+        2. N x K x T x F batch comes out of BatchNorm.
+        3. N x K x T x F batch comes out of nonlinearity.
+        4. N x K x T'x F' batch comes out of Conv2d, where:
+            T' = largest integer below T that is an integer power of 2
+            F' = largest integer below F that is an integer power of 2
+            If T != F, pool on the higher dimension only until they equal.
+        5. N x K x T' x F' batch comes out of Conv2d.
+        6. N x K x T''x F'' batch comes out of pooling, where:
+            T'' = T'//2; F'' = F'//2
+        7. Repeat step 5 and 6 until T'' and F'' reach 8.
+        """
+        super(STRFLayer, self).__init__()
+        # Calculate input & output sizes in all layers
+        itdim, ifdim = indim
+        otdim, ofdim = outdim
+        assert (nextpow2(otdim) == otdim) and (nextpow2(ofdim) == ofdim),\
+            "Output dimensions must be integer multiples of 2"
+        iosizes = [(itdim, ifdim)]  # input/output sizes in all layers
+        while (itdim != otdim) or (ifdim != ofdim):
+            if itdim != otdim:
+                itdim = nextpow2(itdim)//2
+            if ifdim != ofdim:
+                ifdim = nextpow2(ifdim)//2
+            iosizes.append((itdim, ifdim))
+        nlayers = len(iosizes) - 1  # exclude STRF layer
+        nchans = [min(2*nkern*(2**n), nchan) for n in range(len(iosizes))]
+        assert nchans[-1] == nchan
+
+        # Construct all layers
+        layers = [STRFConv(fr, bins_per_octave, suptime, supoct, nkern),
+                  nn.BatchNorm2d(nkern*2),
+                  nn.ReLU()
+                  ]  # always start with STRF layer
+        for ll in range(nlayers):
+            # fully convolutional layers here
+            iit, iif = iosizes[ll]
+            oot, oof = iosizes[ll+1]
+            sst = 1 if iit == oot else 2
+            ssf = 1 if iif == oof else 2
+            fconv = [nn.Conv2d(nchans[ll], nchans[ll+1], kernel_size,
+                     stride=(sst, ssf),
+                     padding=(self.padsize(iit, oot, kernel_size, sst),
+                     self.padsize(iif, oof, kernel_size, ssf))),
+                     nn.BatchNorm2d(nchans[ll+1]),
+                     nn.ReLU()
+                     ]
+            layers.extend(fconv)
+
+        self.layers = nn.ModuleList(layers)
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+    @staticmethod
+    def padsize(isize, osize, ksize, stride):
+        """Calculate desired padding size given input and output dimensions.
+
+        Follows PyTorch's definition, ignoring dilation:
+            osize = floor((isize + 2*padsize - (ksize-1) - 1)/stride) + 1
+        =>  stride(osize-1) = isize + 2*padsize - (ksize-1) - 1
+        =>  padsize = ceil((stride(osize-1)-isize+ksize) / 2)
+        """
+        psize = math.ceil((stride*(osize-1) - isize + ksize) / 2)
+        assert osize == math.floor((isize + 2*psize - ksize)/stride + 1)
+        return psize

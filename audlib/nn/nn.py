@@ -134,13 +134,6 @@ class MLP(Module):
             x = self.activate_hid(layer(x))
         return self.activate_out(self.linears[-1](x))
 
-    def extra_repr(self):
-        """Vebose info."""
-        return 'indim={}, outdim={}, hiddims={}, nhidden={}, bias={}'.format(
-            self.indim, self.outdim, self.hiddims, self.nhidden,
-            self.bias is not None
-        )
-
 
 class AdvancedLSTMCell(nn.LSTMCell):
     """Extend LSTMCell to learn initial states."""
