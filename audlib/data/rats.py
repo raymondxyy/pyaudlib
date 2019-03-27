@@ -5,9 +5,25 @@ import os
 
 import soundfile as sf
 
-from .dataset import SEDataset
+from .dataset import SEDataset, Dataset
 from .datatype import NoisySpeech, Audio
 from ..io.audio import audioread
+from ..io.batch import genfiles
+
+
+class SpeechActivity(Audio):
+    """A data structure for speech activity detection.
+
+    speechtype can only be one of the following:
+        - None --> Undecided
+        - 's' --> spech
+        - 'n' --> nonspeech
+    """
+    __slots__ = "speechtype"
+
+    def __init__(self, signal=None, samplerate=None, speechtype=None):
+        super(SpeechActivity, self).__init__(signal, samplerate)
+        self.speechtype = speechtype
 
 
 class SERATS_SAD(SEDataset):
@@ -135,7 +151,7 @@ class SERATS_SAD(SEDataset):
 
         # Calculate new vad timestamps
         offset = nstart*1. / sr1
-        vadref = tabread(vad)
+        vadref = self.tabread(vad)
         vadref = [(ts-offset, te-offset) for ts, te in vadref]
         sample = NoisySpeech(noisy=Audio(sigx, sr1),
                              clean=Audio(sigs, sr2), vad=vadref)
@@ -145,15 +161,132 @@ class SERATS_SAD(SEDataset):
 
         return sample
 
+    @staticmethod
+    def tabread(tabpath):
+        """Read .tab file to speech-only timestamps."""
+        tstamps = []
+        with open(tabpath, 'r') as fp:
+            for line in fp:
+                line = line.rstrip().split()
+                stype, tstart, tend = line[4], float(line[2]), float(line[3])
+                if stype == 'S':  # speech
+                    tstamps.append((tstart, tend))
+        return tstamps
 
-def tabread(tabpath):
-    """Read .tab file in RATS_SAD dataset and return speech timestamps."""
-    tstamps = []
-    with open(tabpath, 'r') as fp:
-        lines = fp.readlines()
-        for line in lines:
-            line = line.strip().split()
-            stype, tstart, tend = line[4], float(line[2]), float(line[3])
-            if stype == 'S':  # speech
-                tstamps.append((tstart, tend))
-    return tstamps
+
+class RATS_SAD(Dataset):
+    """The orignal LDC2015S02 dataset for speech activity detection.
+
+    The dataset directory should follow the structure below.
+
+    """
+    def __init__(self, root, partition, sr=None, filt=None, transform=None):
+        """Instantiate an ASVspoof dataset.
+
+        Parameters
+        ----------
+        root: str
+            The root directory of AVSpoof.
+        partition: str
+            One of 'train', 'dev-1', or 'dev-2'.
+        sr: int, optional
+            Sampling rate in Hz. RATS_SAD is recorded at 16kHz.
+        filt: callable() --> bool
+            Optional user-defined filter function.
+        transform: callable(SpeechActivity) -> SpeechActivity
+            User-defined transformation function.
+
+        Returns
+        -------
+        An class instance `rats_sad` that has the following properties:
+            - len(rats_sad) == number of usable audio samples
+            - rats_sad[idx] == a SpeechActivity instance
+
+        See Also
+        --------
+        SpeechActivity
+
+        """
+        if partition == 'train':
+            root = os.path.join(root, 'data/train')
+        elif partition == 'dev-1':
+            root = os.path.join(root, 'data/dev-1')
+        elif partition == 'dev-2':
+            root = os.path.join(root, 'data/dev-2')
+        else:
+            raise ValueError("partition must be one of train/valid/test.")
+        self.root = root
+        self.sr = sr if sr else 16000
+        self.audroot = os.path.join(root, 'audio')
+        self.sadroot = os.path.join(root, 'sad')
+        assert all(os.path.exists(dd) for dd in [self.audroot, self.sadroot])
+        self.partition = partition
+
+        # Read all segments from .tab files
+        self._allsegs = []
+        for tt in genfiles(self.sadroot,
+                           filt=lambda p: p.endswith('.tab'), relpath=True):
+            # check existence of audio first
+            aa = tt.replace('.tab', '.flac')
+            if not os.path.exists(os.path.join(self.audroot, aa)):
+                print(f"{tt} does not exist. Skip...")
+                continue
+            segs = filter(filt, self.tab2segs(os.path.join(self.sadroot, tt)))
+            self._allsegs.extend([(aa, seg) for seg in segs])
+
+        self.transform = transform
+
+    def read(self, path, start, stop, label):
+        sig, ssr = audioread(path, sr=self.sr, start=int(start*self.sr),
+                             stop=int(stop*self.sr), norm=True)
+        return SpeechActivity(sig, ssr, speechtype=label)
+
+    def __getitem__(self, idx):
+        path, ((ts, te), label) = self._allsegs[idx]
+        samp = self.read(os.path.join(self.audroot, path), ts, te, label)
+        if self.transform:
+            samp = self.transform(samp)
+
+        return samp
+
+    def __len__(self):
+        return len(self._allsegs)
+
+    def __repr__(self):
+        """Representation of RATS_SAD."""
+        return r"""{}({}, sr={}, transform={})
+        """.format(self.__class__.__name__, self.root, self.sr, self.transform)
+
+    def __str__(self):
+        """Print out a summary of instantiated dataset."""
+        ss, ns = 0, 0  # speech and nonspeech durations
+        for path, seg in self._allsegs:
+            (ts, te), label = seg
+            if label == 's':
+                ss += (te-ts)
+            else:
+                ns += (te-ts)
+        report = """
+            +++++ Summary for [{}] partition [{}] +++++
+            Total [{}] valid segments to be processed.
+            Total speech duration: [{:.2f}] hours
+            Total nonspeech duration: [{:.2f}] hours
+        """.format(self.__class__.__name__, self.partition,
+                   len(self._allsegs), ss/3600, ns/3600)
+
+        return report
+
+    @staticmethod
+    def tab2segs(tabpath):
+        """Read a .tab file to a list of segments.
+
+        An example line:
+            dev-1	19356_urd_src	0	3.38	NS	manual urd	original
+        """
+        segs = []
+        with open(tabpath, 'r') as fp:
+            for line in fp:
+                line = line.rstrip().split()
+                stype, tstart, tend = line[4], float(line[2]), float(line[3])
+                segs.append(((tstart, tend), stype.lower()))
+        return segs

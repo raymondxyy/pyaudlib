@@ -147,6 +147,7 @@ class STRFConv(nn.Module):
 
 class STRFLayer(nn.Module):
     """A fully convolutional layer with STRF kernels at the bottom."""
+    # NOTE: This version is UNSTABLE. Use with caution.
     def __init__(self, fr, bins_per_octave, suptime, supoct, nkern,
                  indim, outdim, kernel_size, nchan):
         """Construct a STRF layer from STRFConv and nonlinearities.
@@ -179,14 +180,12 @@ class STRFLayer(nn.Module):
                 ifdim = nextpow2(ifdim)//2
             iosizes.append((itdim, ifdim))
         nlayers = len(iosizes) - 1  # exclude STRF layer
-        nchans = [min(2*nkern*(2**n), nchan) for n in range(len(iosizes))]
-        assert nchans[-1] == nchan
+        # linearly space between 2*nkern and nchan
+        nchans = [max((2*nkern)/(2**n), nchan) for n in range(len(iosizes))]
+        assert nchans[-1] >= nchan
 
         # Construct all layers
-        layers = [STRFConv(fr, bins_per_octave, suptime, supoct, nkern),
-                  nn.BatchNorm2d(nkern*2),
-                  nn.ReLU()
-                  ]  # always start with STRF layer
+        layers = [STRFConv(fr, bins_per_octave, suptime, supoct, nkern)]
         for ll in range(nlayers):
             # fully convolutional layers here
             iit, iif = iosizes[ll]
@@ -197,7 +196,7 @@ class STRFLayer(nn.Module):
                      stride=(sst, ssf),
                      padding=(self.padsize(iit, oot, kernel_size, sst),
                      self.padsize(iif, oof, kernel_size, ssf))),
-                     nn.BatchNorm2d(nchans[ll+1]),
+                     #nn.BatchNorm2d(nchans[ll+1]),
                      nn.ReLU()
                      ]
             layers.extend(fconv)
