@@ -90,7 +90,8 @@ class MLP(Module):
     """Multi-Layer Perceptron."""
 
     def __init__(self, indim, outdim, hiddims=[], bias=True,
-                 activate_hid=nn.ReLU(), activate_out=nn.ReLU()):
+                 activate_hid=nn.ReLU(), activate_out=nn.ReLU(),
+                 batchnorm=[]):
         """Initialize a MLP.
 
         Parameters
@@ -121,18 +122,20 @@ class MLP(Module):
             print("No hidden layers.")
         indims = [indim] + hiddims
         outdims = hiddims + [outdim]
-        self.linears = nn.ModuleList(
-            [nn.Linear(indims[ii], outdims[ii], bias=bias)
-             for ii in range(1 + self.nhidden)]
-        )
+        self.layers = nn.ModuleList([])
+        for ii in range(self.nhidden):
+            self.layers.append(nn.Linear(indims[ii], outdims[ii], bias=bias))
+            if len(batchnorm) > 0 and batchnorm[ii]:
+                self.layers.append(nn.BatchNorm1d(outdims[ii], momentum=0.05))
+            self.layers.append(activate_hid)
+        self.layers.append(nn.Linear(indims[ii+1], outdims[ii+1], bias=bias))
+        self.layers.append(activate_out)
 
     def forward(self, x):
         """One forward pass."""
-        for ii, layer in enumerate(self.linears):
-            if ii == self.nhidden:
-                break
-            x = self.activate_hid(layer(x))
-        return self.activate_out(self.linears[-1](x))
+        for layer in self.layers:
+            x = layer(x)
+        return x
 
 
 class AdvancedLSTMCell(nn.LSTMCell):

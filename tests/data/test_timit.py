@@ -1,10 +1,15 @@
 """Test suite for TIMIT."""
+import os
 from audlib.data.timit import TIMIT
 
 
 def test_timit():
-    dataset = TIMIT('/home/xyy/data/timit')
-    print(dataset)
+    SI = TIMIT('/home/xyy/data/timit',
+               filt=lambda p: 'SI' in os.path.basename(p).upper())
+    SX = TIMIT('/home/xyy/data/timit',
+               filt=lambda p: 'SX' in os.path.basename(p).upper())
+
+    print(SX, SI)
 
 
 if __name__ == "__main__":

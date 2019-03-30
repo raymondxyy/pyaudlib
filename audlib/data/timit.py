@@ -1,6 +1,7 @@
 """Datasets derived from the TIMIT dataset for phoneme recognition."""
 import os
 
+from ..io.audio import audioinfo
 from .dataset import AudioDataset, audioread
 from .datatype import Audio
 
@@ -85,6 +86,21 @@ class TIMIT(AudioDataset):
             print(f"{path} does not exist!")
             return None
 
+    @staticmethod
+    def spkrinfo(path, istrain):
+        """Load speaker table from file."""
+        with open(path) as fp:
+            spkrt = {}  # spkrt['spkr'] = int(label)
+            ii = 0
+            for line in fp:
+                if line[0] != ';':  # ignore header
+                    line = line.rstrip().split()
+                    sid, train = line[0], line[3].upper() == 'TRN'
+                    if not (istrain ^ train):
+                        spkrt[sid] = ii
+                        ii += 1
+        return spkrt
+
     def __init__(self, root, train=True, sr=None, filt=None, read=None,
                  transform=None):
         """Instantiate an ASVspoof dataset.
@@ -113,23 +129,25 @@ class TIMIT(AudioDataset):
 
         See Also
         --------
-        SpoofedAudio, dataset.AudioDataset, datatype.Audio
+        TIMITSpeech, dataset.AudioDataset, datatype.Audio
 
         """
-        if train:
-            root = os.path.join(root, 'TIMIT/TRAIN')
-        else:
-            root = os.path.join(root, 'TIMIT/TEST')
         self.train = train
+        self._spkr_table = self.spkrinfo(
+            os.path.join(root, 'TIMIT/DOC/SPKRINFO.TXT'), train)
+        if train:
+            audroot = os.path.join(root, 'TIMIT/TRAIN')
+        else:
+            audroot = os.path.join(root, 'TIMIT/TEST')
         self._read = read
         self.sr = sr
 
         super(TIMIT, self).__init__(
-            root, filt=self.isaudio if not filt else lambda p:
+            audroot, filt=self.isaudio if not filt else lambda p:
                 self.isaudio(p) and filt(p),
             read=self.read, transform=transform)
 
-    def read(self, path):
+    def read(self, path, nosilence=True):
         """Parse a path into fields, and read audio.
 
         A path should look like:
@@ -138,14 +156,20 @@ class TIMIT(AudioDataset):
         pbase = os.path.splitext(path)[0]
         gsid = pbase.split('/')[-2]
         gender, sid = gsid[0], gsid[1:]
+        assert sid in self._spkr_table
+        sid = self._spkr_table[sid]
         phoneseq = self.phnread(pbase+'.PHN')
         wrdseq = self.phnread(pbase+'.WRD')
         transcrpt = self.txtread(pbase+'.TXT')
 
         if not self._read:
-            sig, ssr = audioread(path, sr=self.sr)
+            sig, ssr = audioread(path, sr=self.sr, norm=True)
         else:
             sig, ssr = self._read(path)
+
+        if nosilence:
+            ns, ne = wrdseq[0][0][0], wrdseq[-1][0][1]
+            sig = sig[ns:ne]
 
         return TIMITSpeech(sig, ssr, speaker=sid, gender=gender,
                            transcript=transcrpt, phonemeseq=phoneseq,
@@ -158,10 +182,31 @@ class TIMIT(AudioDataset):
 
     def __str__(self):
         """Print out a summary of instantiated dataset."""
+        spkr_appeared = set([])
+        for path in self._filepaths:
+            sid = path.split('/')[-2][1:]
+            assert sid in self._spkr_table, f"{sid} not a valid speaker!"
+            spkr_appeared.add(sid)
         report = """
             +++++ Summary for [{}] partition [{}] +++++
             Total [{}] valid files to be processed.
+            Total [{}/{}] speakers appear in this set.
         """.format(self.__class__.__name__, 'train' if self.train else 'test',
-                   len(self._filepaths))
+                   len(self._filepaths), len(spkr_appeared),
+                   len(self._spkr_table))
 
         return report
+
+
+def utt_no_shorter_than(path, duration, unit='second'):
+    """Check for an utterance (after silence removal)."""
+    pbase = os.path.splitext(path)[0]
+    wrdseq = TIMIT.phnread(pbase+'.WRD')
+    ns, ne = wrdseq[0][0][0], wrdseq[-1][0][1]
+    if unit == 'second':
+        sr = audioinfo(path).samplerate
+        return (ne-ns) / sr >= duration
+    elif unit == 'sample':
+        return (ne-ns) >= duration
+    else:
+        raise ValueError(f"Unsupported unit: {unit}.")

@@ -96,6 +96,9 @@ class STRFConv(nn.Module):
 
     def strfs(self):
         """Make STRFs using current parameters."""
+        if self.supt.device != self.rates_.device:  # for first run
+            self.supt = self.supt.to(self.rates_.device)
+            self.supf = self.supf.to(self.rates_.device)
         K, S, T = len(self.rates_), len(self.supf), len(self.supt)
         # Construct STRFs
         hs = self._hs(self.supf, self.scales_.view(K, 1))
@@ -116,7 +119,7 @@ class STRFConv(nn.Module):
         rimag = hirt_[..., 1].view(K, T, 1) * hirs_[..., 1].view(K, 1, S)
         strfs = torch.cat((rreal-rimag, rreal+rimag), 0)  # 2K x T x S
 
-        return strfs
+        return strfs.unsqueeze(1).to(self.rates_.device)
 
     def forward(self, sigspec):
         """Convolve a spectrographic representation with all STRF kernels.
@@ -133,12 +136,9 @@ class STRFConv(nn.Module):
             Batch of STRF activatations.
 
         """
-        if self.supt.device != sigspec.device:  # for first run
-            self.supt = self.supt.to(sigspec.device)
-            self.supf = self.supf.to(sigspec.device)
         if len(sigspec.shape) == 2:  # expand batch dimension if single eg
             sigspec.unsqueeze_(0)
-        strfs = self.strfs().type_as(sigspec).unsqueeze(1).to(sigspec.device)
+        strfs = self.strfs().type_as(sigspec)
         return F.conv2d(sigspec.unsqueeze(1), strfs, padding=self.padding)
 
     def __repr__(self):
