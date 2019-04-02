@@ -119,7 +119,7 @@ class STRFConv(nn.Module):
         rimag = hirt_[..., 1].view(K, T, 1) * hirs_[..., 1].view(K, 1, S)
         strfs = torch.cat((rreal-rimag, rreal+rimag), 0)  # 2K x T x S
 
-        return strfs.unsqueeze(1).to(self.rates_.device)
+        return strfs
 
     def forward(self, sigspec):
         """Convolve a spectrographic representation with all STRF kernels.
@@ -137,8 +137,8 @@ class STRFConv(nn.Module):
 
         """
         if len(sigspec.shape) == 2:  # expand batch dimension if single eg
-            sigspec.unsqueeze_(0)
-        strfs = self.strfs().type_as(sigspec)
+            sigspec = sigspec.unsqueeze(0)
+        strfs = self.strfs().unsqueeze(1).type_as(sigspec)
         return F.conv2d(sigspec.unsqueeze(1), strfs, padding=self.padding)
 
     def __repr__(self):

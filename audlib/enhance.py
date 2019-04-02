@@ -10,11 +10,11 @@
 
 import numpy as np
 from numpy.fft import rfft, irfft
-from scipy.special import gammainc
 
 from .sig.stproc import stana, ola
 from .sig.temporal import lpc_parcor, ref2pred
 from .sig.transform import stft, istft, stpsd
+from .noise import mmse_henriks as npsd_henriks
 from .cfg import cfgload
 
 # Load in configurations first
@@ -419,7 +419,7 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
     return xout
 
 
-def mmse_henriks(sig, sr, wind, hop, nfft, alpha=.98, beta=.8, noise=None,
+def mmse_henriks(sig, sr, wind, hop, nfft, noise=None, alpha=.98, beta=.8, 
                  rule='wiener'):
     """Implement the MMSE method by Henriks et al for noise PSD estimation.
 
@@ -453,42 +453,17 @@ def mmse_henriks(sig, sr, wind, hop, nfft, alpha=.98, beta=.8, noise=None,
 
     See Also
     --------
-    priori2filt
+    noise.mmse_henriks
 
     """
-    # Estimate noise PSD first;  will be used as Pnn(-1)
-    if noise is None:
-        npsd_init = stpsd(sig, sr, wind, hop, nfft, nframes=6)
-    else:
-        npsd_init = stpsd(noise, sr, wind, hop, nfft)
-
     sigspec = stft(sig, sr, wind, hop, nfft, synth=True, zphase=True)
-    npsd = np.empty((sigspec.shape[0]+1, len(npsd_init)))
-    priori = np.empty_like(npsd)
-    posteri = np.empty_like(npsd)
-    npsd[0] = npsd_init
-    posteri[0] = 1
-    priori[0] = alpha + (1-alpha)*np.maximum(posteri[0] - 1, 0)
-    for i, pspec in enumerate(sigspec.real**2 + sigspec.imag**2):
-        posteri[i+1] = pspec / npsd[i]
-        priori_hat = np.maximum(posteri[i+1] - 1, 0)  # half-wave rectify
-        npsd_hat = (1/(1+priori_hat)**2
-                    + priori_hat/((1+priori_hat)*posteri[i+1])) * pspec
-        priori[i+1] = alpha*(priori2filt(priori[i], rule)**2) *\
-            posteri[i] + (1-alpha)*priori_hat
-        bias = 1 / ((1+priori[i+1]) * gammainc(2, 1/(1+priori[i+1]))
-                    + np.exp(-1/(1+priori[i+1])))
-        npsd_hat *= bias  # apply correction term to Pnn
+    _, priori, _ = npsd_henriks(sigspec.real**2+sigspec.imag**2, noise,
+                                alpha, beta, rule)
 
-        npsd[i+1] = beta * npsd[i] + (1-beta) * npsd_hat
-        if i == sigspec.shape[0]:
-            break
-
-    # Enhance
-    irm = priori2filt(priori[1:], rule)
+    irm = priori2filt(priori, rule)
     xout = istft(sigspec*irm, sr, wind, hop, nfft, zphase=True)
 
-    return xout, npsd[1:]
+    return xout
 
 
 def asnr_optim(x, t, sr, wind, hop, nfft, noise=None, zphase=True,
