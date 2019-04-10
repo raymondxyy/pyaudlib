@@ -7,7 +7,8 @@ def test_timit():
     SI = TIMIT('/home/xyy/data/timit',
                filt=lambda p: 'SI' in os.path.basename(p).upper())
     SX = TIMIT('/home/xyy/data/timit',
-               filt=lambda p: 'SX' in os.path.basename(p).upper())
+               filt=lambda p: 'SX' in os.path.basename(p).upper(),
+               phone=True)
 
     print(SX, SI)
 

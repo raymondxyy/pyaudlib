@@ -1,5 +1,6 @@
 """Datasets derived from the TIMIT dataset for phoneme recognition."""
 import os
+from random import randint
 
 from ..io.audio import audioinfo
 from .dataset import AudioDataset, audioread
@@ -8,16 +9,18 @@ from .datatype import Audio
 
 class TIMITSpeech(Audio):
     """A data structure for TIMIT audio."""
-    __slots__ = 'speaker', 'gender', 'transcript', 'phonemeseq', 'wordseq'
+    __slots__ = 'speaker', 'gender', 'transcript', 'phonemeseq', 'wordseq', 'phone'
 
     def __init__(self, signal=None, samplerate=None, speaker=None, gender=None,
-                 transcript=None, phonemeseq=None, wordseq=None):
+                 transcript=None, phonemeseq=None, wordseq=None, phone=None):
         super(TIMITSpeech, self).__init__(signal, samplerate)
         self.speaker = speaker
         self.transcript = transcript
         self.phonemeseq = phonemeseq
         self.gender = gender
         self.wordseq = wordseq
+        # exists only in phoneread
+        self.phone = phone  # phone label according to _phon_table
 
 
 class TIMIT(AudioDataset):
@@ -101,7 +104,7 @@ class TIMIT(AudioDataset):
                         ii += 1
         return spkrt
 
-    def __init__(self, root, train=True, sr=None, filt=None, read=None,
+    def __init__(self, root, train=True, sr=None, filt=None, phone=False,
                  transform=None):
         """Instantiate an ASVspoof dataset.
 
@@ -115,9 +118,8 @@ class TIMIT(AudioDataset):
             Sampling rate in Hz. TIMIT is recorded at 16kHz.
         filt: callable, optional
             Filters to be applied on each audio path. Default to None.
-        read: callable(str) -> (array_like, int), optional
-            User-defined ways to read in an audio.
-            Returned values are wrapped around an `SpoofedAudio` class.
+        phone: bool, False
+            Read the audio of an phoneme instead of a sentence?
         transform: callable(SpoofedAudio) -> SpoofedAudio
             User-defined transformation function.
 
@@ -133,25 +135,46 @@ class TIMIT(AudioDataset):
 
         """
         self.train = train
+        # hard-coded phone labels
+        self._phon_table = {p: i for i, p in enumerate(
+            """aa ae ah ao aw ax ax-h axr ay b bcl ch d dcl dh dx eh el em en
+               eng epi er ey f g gcl h# hh hv ih ix iy jh k kcl l m n ng nx ow
+               oy p pau pcl q r s sh t tcl th uh uw ux v w y z zh""".split()
+        )}
         self._spkr_table = self.spkrinfo(
             os.path.join(root, 'TIMIT/DOC/SPKRINFO.TXT'), train)
         if train:
             audroot = os.path.join(root, 'TIMIT/TRAIN')
         else:
             audroot = os.path.join(root, 'TIMIT/TEST')
-        self._read = read
         self.sr = sr
 
         super(TIMIT, self).__init__(
             audroot, filt=self.isaudio if not filt else lambda p:
                 self.isaudio(p) and filt(p),
-            read=self.read, transform=transform)
+            read=self.phoneread if phone else self.read, transform=transform)
+
+    def phoneread(self, path):
+        """Parse a path into fields, then read audio of a single phone.
+
+        This is suitable for tasks such as phoneme recognition.
+        """
+        pbase = os.path.splitext(path)[0]
+        gsid = pbase.split('/')[-2]
+        gender, sid = gsid[0], gsid[1:]
+        assert sid in self._spkr_table
+        sid = self._spkr_table[sid]
+        phoneseq = self.phnread(pbase+'.PHN')
+        (ns, ne), pp = phoneseq[randint(0, len(phoneseq)-1)]
+        sig, ssr = audioread(path, sr=self.sr, norm=True, start=ns, stop=ne)
+
+        return TIMITSpeech(sig, ssr, speaker=sid, gender=gender,
+                           phone=self._phon_table[pp])
 
     def read(self, path, nosilence=True):
         """Parse a path into fields, and read audio.
 
-        A path should look like:
-        root/TIMIT/TRAIN/DR1/FCJF0/SA1.WAV
+        This is suitable for tasks that require the entire audio waveform.
         """
         pbase = os.path.splitext(path)[0]
         gsid = pbase.split('/')[-2]
@@ -161,11 +184,7 @@ class TIMIT(AudioDataset):
         phoneseq = self.phnread(pbase+'.PHN')
         wrdseq = self.phnread(pbase+'.WRD')
         transcrpt = self.txtread(pbase+'.TXT')
-
-        if not self._read:
-            sig, ssr = audioread(path, sr=self.sr, norm=True)
-        else:
-            sig, ssr = self._read(path)
+        sig, ssr = audioread(path, sr=self.sr, norm=True)
 
         if nosilence:
             ns, ne = wrdseq[0][0][0], wrdseq[-1][0][1]
@@ -187,13 +206,32 @@ class TIMIT(AudioDataset):
             sid = path.split('/')[-2][1:]
             assert sid in self._spkr_table, f"{sid} not a valid speaker!"
             spkr_appeared.add(sid)
+        phoncts = {p: 0 for p in self._phon_table}
+        mindur = {p: 100 for p in self._phon_table}
+        maxdur = {p: 0 for p in self._phon_table}
+        for path in self._filepaths:
+            sr = audioinfo(os.path.join(self.root, path)).samplerate
+            path = os.path.join(self.root, os.path.splitext(path)[0]+'.PHN')
+            for (ts, te), pp in self.phnread(path):
+                assert pp in phoncts, f"[{pp}] not in phone dict!"
+                phoncts[pp] += 1
+                dur = (te - ts) / sr * 1000
+                if mindur[pp] > dur:
+                    mindur[pp] = dur
+                if maxdur[pp] < dur:
+                    maxdur[pp] = dur
+        totcts = sum(v for p, v in phoncts.items())
         report = """
             +++++ Summary for [{}] partition [{}] +++++
             Total [{}] valid files to be processed.
             Total [{}/{}] speakers appear in this set.
+            [Phoneme]: [counts], [percentage], [min-max duration (ms)]\n{}
         """.format(self.__class__.__name__, 'train' if self.train else 'test',
                    len(self._filepaths), len(spkr_appeared),
-                   len(self._spkr_table))
+                   len(self._spkr_table),
+                   "\n".join(
+                       f"\t\t[{p:>4}]: [{c:>4}], [{c*100/totcts:2.2f}%], [{mindur[p]:.1f}-{maxdur[p]:.0f}]"
+                       for p, c in phoncts.items()))
 
         return report
 
