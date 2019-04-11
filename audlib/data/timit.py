@@ -105,7 +105,7 @@ class TIMIT(AudioDataset):
         return spkrt
 
     def __init__(self, root, train=True, sr=None, filt=None, phone=False,
-                 transform=None):
+                 transform=None, nosilence=False):
         """Instantiate an ASVspoof dataset.
 
         Parameters
@@ -120,14 +120,16 @@ class TIMIT(AudioDataset):
             Filters to be applied on each audio path. Default to None.
         phone: bool, False
             Read the audio of an phoneme instead of a sentence?
-        transform: callable(SpoofedAudio) -> SpoofedAudio
+            If True, randomly read ONE phone segment from an audio.
+            If False, entire audio will be read.
+        transform: callable(TIMITSpeech) -> TIMITSpeech
             User-defined transformation function.
 
         Returns
         -------
         An class instance `TIMIT` that has the following properties:
             - len(TIMIT) == number of usable audio samples
-            - TIMIT[idx] == a SpoofedAudio instance
+            - TIMIT[idx] == a TIMITSpeech instance
 
         See Also
         --------
@@ -148,6 +150,7 @@ class TIMIT(AudioDataset):
         else:
             audroot = os.path.join(root, 'TIMIT/TEST')
         self.sr = sr
+        self.nosilence = nosilence
 
         super(TIMIT, self).__init__(
             audroot, filt=self.isaudio if not filt else lambda p:
@@ -166,12 +169,11 @@ class TIMIT(AudioDataset):
         sid = self._spkr_table[sid]
         phoneseq = self.phnread(pbase+'.PHN')
         (ns, ne), pp = phoneseq[randint(0, len(phoneseq)-1)]
-        sig, ssr = audioread(path, sr=self.sr, norm=True, start=ns, stop=ne)
-
-        return TIMITSpeech(sig, ssr, speaker=sid, gender=gender,
+        sig, sr = audioread(path, sr=self.sr, norm=True, start=ns, stop=ne)
+        return TIMITSpeech(sig, sr, speaker=sid, gender=gender,
                            phone=self._phon_table[pp])
 
-    def read(self, path, nosilence=True):
+    def read(self, path):
         """Parse a path into fields, and read audio.
 
         This is suitable for tasks that require the entire audio waveform.
@@ -184,15 +186,22 @@ class TIMIT(AudioDataset):
         phoneseq = self.phnread(pbase+'.PHN')
         wrdseq = self.phnread(pbase+'.WRD')
         transcrpt = self.txtread(pbase+'.TXT')
-        sig, ssr = audioread(path, sr=self.sr, norm=True)
 
-        if nosilence:
+        if self.nosilence:
             ns, ne = wrdseq[0][0][0], wrdseq[-1][0][1]
-            sig = sig[ns:ne]
+            sig, ssr = audioread(path, sr=self.sr, start=ns, stop=ne)
+            for ii in range(len(phoneseq)):
+                (ss, ee), pp = phoneseq[ii]
+                ss -= ns
+                ee -= ns
+                phoneseq[ii] = (ss, ee), pp
+        else:
+            sig, ssr = audioread(path, sr=self.sr)
 
         return TIMITSpeech(sig, ssr, speaker=sid, gender=gender,
                            transcript=transcrpt, phonemeseq=phoneseq,
-                           wordseq=wrdseq)
+                           wordseq=wrdseq,
+                           phone=[(t, self._phon_table[p]) for t,p in phoneseq])
 
     def __repr__(self):
         """Representation of TIMIT."""
