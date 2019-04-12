@@ -104,6 +104,15 @@ class TIMIT(AudioDataset):
                         ii += 1
         return spkrt
 
+    @staticmethod
+    def isvowel(phone, semivowels=True):
+        vowels = "iy ih eh ey ae aa aw ay ah ao oy ow uh uw ux er ax ix axr ax-h"
+        semivowels = "l r w y hh hv el"
+        if semivowels:
+            return (phone in vowels.split()) or (phone in semivowels.split())
+        else:
+            return phone in vowels.split()
+
     def __init__(self, root, train=True, sr=None, filt=None, phone=False,
                  transform=None, nosilence=False):
         """Instantiate an ASVspoof dataset.
@@ -190,11 +199,13 @@ class TIMIT(AudioDataset):
         if self.nosilence:
             ns, ne = wrdseq[0][0][0], wrdseq[-1][0][1]
             sig, ssr = audioread(path, sr=self.sr, start=ns, stop=ne)
-            for ii in range(len(phoneseq)):
-                (ss, ee), pp = phoneseq[ii]
+            pseq = []
+            for (ss, ee), pp in phoneseq:
                 ss -= ns
                 ee -= ns
-                phoneseq[ii] = (ss, ee), pp
+                if ss >= 0:
+                    pseq.append(((ss, ee), pp))
+            phoneseq = pseq
         else:
             sig, ssr = audioread(path, sr=self.sr)
 
@@ -245,15 +256,22 @@ class TIMIT(AudioDataset):
         return report
 
 
-def utt_no_shorter_than(path, duration, unit='second'):
+def utt_no_shorter_than(path, duration, allvowel=False, unit='second'):
     """Check for an utterance (after silence removal)."""
     pbase = os.path.splitext(path)[0]
     wrdseq = TIMIT.phnread(pbase+'.WRD')
-    ns, ne = wrdseq[0][0][0], wrdseq[-1][0][1]
+    phoneseq = TIMIT.phnread(pbase+'.PHN')
+    if allvowel:  # only count vowel sound duration
+        dur = 0
+        for (ns, ne), pp in phoneseq:
+            if TIMIT.isvowel(pp):
+                dur += (ne-ns)
+    else:
+        dur = wrdseq[-1][0][1] - wrdseq[0][0][0]
     if unit == 'second':
         sr = audioinfo(path).samplerate
-        return (ne-ns) / sr >= duration
+        return dur / sr >= duration
     elif unit == 'sample':
-        return (ne-ns) >= duration
+        return dur >= duration
     else:
         raise ValueError(f"Unsupported unit: {unit}.")
