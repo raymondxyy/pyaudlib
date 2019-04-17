@@ -246,15 +246,48 @@ class Gammatone(Filterbank):
         """Get filter coefficients of k-th channel."""
         return self.filters[k]
 
-    def freqz(self, k, nfft=None):
-        """Compute k-th channel's frequency reponse."""
-        if nfft is None:
-            nfft = 1024
-        return erb_freqz(*self.filters[k], nfft)
+    def freqz(self, k, nfft=1024, powernorm=False):
+        """Compute k-th channel's frequency reponse.
+
+        Parameters
+        ----------
+        k: int
+            ERB frequency channel.
+        nfft: int, None
+            Number of linear frequency points.
+        powernorm: bool, False
+            Normalize power to unity if True.
+        """
+        ww, hh = erb_freqz(*self.filters[k], nfft)
+        if powernorm:
+            hh /= sum(hh.real**2 + hh.imag**2)
+
+        return ww, hh
 
     def filter(self, sig, k, cascade=False):
         """Filter signal with k-th channel."""
         return erb_fbank(sig, *self.filters[k], cascade=cascade)
+
+    def gammawgt(self, nfft, powernorm=False, squared=True):
+        """Return the Gammatone weighting function for STFT.
+
+        Parameters
+        ----------
+        nfft: int
+            Number of DFT points.
+        powernorm: bool, False
+            Normalize power of Gammatone weighting function to unity.
+        squared: bool, True
+            Apply squared Gammtone weighting.
+        """
+        wts = np.empty((nfft//2+1, self.num_chan))
+        for k in range(self.num_chan):
+            wts[:, k] = np.abs(self.freqz(k, nfft, powernorm)[1][:nfft//2+1])
+
+        if squared:
+            wts = wts**2
+
+        return wts
 
 
 class ConstantQ(Filterbank):

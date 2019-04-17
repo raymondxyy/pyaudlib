@@ -11,7 +11,6 @@ References:
 """
 
 import numpy as np
-from numpy import convolve as conv
 from scipy import signal
 
 from .util import freqz
