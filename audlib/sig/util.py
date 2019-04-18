@@ -13,6 +13,47 @@ def pre_emphasis(sig, alpha):
     return lfilter([1, -alpha], 1, sig)
 
 
+def asymfilt(xin, la, lb, zi=None):
+    r"""Asymmetric nonlinear filter in eq.4 of Kim and Stern.
+
+    This implementation largely follows paper by Kim and Stern:
+    Kim, C., & Stern, R. M. (2016).
+    Power-Normalized Cepstral Coefficients (PNCC) for Robust Speech Recognition.
+    IEEE/ACM Transactions on Audio Speech and Language Processing, 24(7),
+    1315–1329. https://doi.org/10.1109/TASLP.2016.2545928
+
+    Parameters
+    ----------
+    xin: array_like
+        Input signal.
+        NOTE: This implementation assumes 2D input for performance. If the
+        input is 1D, expand the second axis with xin[:, numpy.newaxis].
+    la: float
+        Recursive averaging coefficient \lambda_a.
+    lb: float
+        Recursive averaging coefficient \lambda_b.
+    zi: array_like, None
+        Initial condition.
+        xin.shape[1] == len(zi). Default to all zeros.
+    """
+    if zi is None:
+        zi = np.zeros(xin.shape[1])
+    assert xin.shape[1] == len(zi), "Dimension mismatch."
+    def filta(qin, qout_tm1): return la * qout_tm1 + (1-la) * qin
+    def filtb(qin, qout_tm1): return lb * qout_tm1 + (1-lb) * qin
+    xout = np.empty_like(xin)
+    mask = xin[0] >= zi
+    xout[0, mask] = filta(xin[0, mask], zi[mask])
+    xout[0, ~mask] = filtb(xin[0, ~mask], zi[~mask])
+
+    for tt in range(1, len(xin)):
+        mask = xin[tt] >= xout[tt-1]
+        xout[tt, mask] = filta(xin[tt, mask], xout[tt-1, mask])
+        xout[tt, ~mask] = filtb(xin[tt, ~mask], xout[tt-1, ~mask])
+
+    return xout
+
+
 def dither(sig, norm=False, scale=1e-6):
     """Dither signal by adding small amount of noise to signal.
 

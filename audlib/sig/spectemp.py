@@ -1,10 +1,110 @@
 """SPECtral-TEMPoral models for audio signals."""
 import numpy as np
-from scipy.signal import hilbert
+from scipy.signal import hilbert, lfilter
+from scipy.fftpack import dct, idct
+
+from .util import asymfilt
+
+
+def pncc(powerspec, medtime=2, medfreq=4, synth=False,
+         vad_const=2, lambda_mu=.999, powerlaw=True, cmn=True, ccdim=13,
+         tempmask=True, lambda_t=.85, mu_t=.2):
+    """Power-Normalized Cepstral Coefficients (PNCC).
+
+    This implementation largely follows paper by Kim and Stern:
+    Kim, C., & Stern, R. M. (2016).
+    Power-Normalized Cepstral Coefficients (PNCC) for Robust Speech
+    Recognition. IEEE/ACM Transactions on Audio Speech and Language Processing,
+    24(7), 1315–1329. https://doi.org/10.1109/TASLP.2016.2545928
+
+    Parameters
+    ----------
+
+    See Also
+    --------
+    fbank.Gammatone
+
+    """
+
+    # B. Calculate median-time power
+    qtild = np.empty_like(powerspec)
+    for mm in range(len(powerspec)):
+        ms = max(0, mm-medtime)
+        me = min(len(powerspec), mm+medtime+1)
+        qtild[mm] = powerspec[ms:me].mean(axis=0)
+
+    # C. Calculate noise floor
+    qtild_le = asymfilt(qtild, .999, .5, zi=.9*qtild[0])
+    qtild0 = qtild - qtild_le
+    qtild0[qtild0 < 0] = 0
+
+    # D. Model temporal masking
+    qtild_p = np.empty_like(qtild0)
+    qtild_p[0] = qtild0[0]
+    for tt in range(1, len(qtild_p)):
+        qtild_p[tt] = np.maximum(lambda_t*qtild_p[tt-1], qtild0[tt])
+
+    if tempmask:
+        qtild_tm = np.empty_like(qtild0)
+        qtild_tm[0] = qtild0[0]
+        for tt in range(1, len(qtild_p)):
+            mask = qtild0[tt] >= (lambda_t * qtild_p[tt-1])
+            qtild_tm[tt, mask] = qtild0[tt, mask]
+            qtild_tm[tt, ~mask] = mu_t * qtild_p[tt-1, ~mask]
+    else:
+        qtild_tm = 0
+
+    # C-D. Track floor of noise floor
+    qtild_f = asymfilt(qtild0, .999, .5, zi=.9*qtild0[0])
+    qtild1 = np.maximum(qtild_tm, qtild_f)
+
+    # C-D. Excitation segment vs. non-excitation segment
+    excitation = qtild >= vad_const*qtild_le
+
+    # C-D. Compare noise modeling and temporal masking
+    rtild = np.empty_like(qtild)
+    rtild[excitation] = qtild1[excitation]
+    rtild[~excitation] = qtild_f[~excitation]
+
+    # E. Spectral weight smoothing
+    stild = np.empty_like(qtild)
+    for kk in range(stild.shape[1]):
+        ks, ke = max(0, kk-medfreq), min(stild.shape[1], kk+medfreq+1)
+        stild[:, kk] = (rtild[:, ks:ke] / qtild[:, ks:ke]).mean(axis=1)
+
+    out = powerspec * stild  # this is T[m,l] in eq.14
+
+    # F. Mean power normalization
+    meanpower = out.mean(axis=1)  # T[m]
+    mu, _ = lfilter([1-lambda_mu], [1, -lambda_mu], meanpower,
+                    zi=[meanpower.mean()])
+
+    out /= mu[:, np.newaxis]  # U[m,l] in eq.16, ignoring the k constant
+
+    # G. Rate-level nonlinearity
+    if powerlaw:
+        out = out ** (1/15)
+    else:
+        out = np.log(out + 1e-8)
+
+    # Finally, apply CMN if needed
+    out = dct(out, norm='ortho')[:, :ccdim]
+    if cmn:
+        out -= out.mean(axis=0)
+
+    return out
+
+
+def pnccspec(powerspec, **kwargs):
+    """Power spectrum derived from Power-Normalized Cepstral Coefficients.
+
+    See `pncc` for a complete list of function parameters.
+    """
+    return idct(pncc(powerspec, **kwargs), n=powerspec.shape[1], norm='ortho')
 
 
 def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0):
-    """Spectral-temporal receptive fields for both up and down direction.
+    """Spectral-temporal response fields for both up and down direction.
 
     Implement the STRF described in Chi, Ru, and Shamma:
     Chi, T., Ru, P., & Shamma, S. A. (2005). Multiresolution spectrotemporal
