@@ -5,10 +5,11 @@ from audlib.data.timit import TIMIT
 
 def test_timit():
     SI = TIMIT('/home/xyy/data/timit',
-               filt=lambda p: 'SI' in os.path.basename(p).upper())
+               filt=lambda p: 'SI' in os.path.basename(p).upper(),
+               readmode='utterance')
     SX = TIMIT('/home/xyy/data/timit',
                filt=lambda p: 'SX' in os.path.basename(p).upper(),
-               phone=True)
+               readmode='rand-phone')
 
     print(SX, SI)
 
