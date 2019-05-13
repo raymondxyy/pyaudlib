@@ -12,8 +12,9 @@ import numpy as np
 from numpy.fft import rfft, irfft
 
 from .sig.stproc import stana, ola
-from .sig.temporal import lpc
+from .sig.temporal import lpc_parcor, ref2pred
 from .sig.transform import stft, istft, stpsd
+from .noise import mmse_henriks as npsd_henriks
 from .cfg import cfgload
 
 # Load in configurations first
@@ -68,7 +69,8 @@ def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):
 
     def wiener_iter_frame(frame):
         """One frame of Wiener iterative filtering."""
-        xlpc = lpc(frame, _lpc_order, _lpc_method)
+        ref, _ = lpc_parcor(frame, _lpc_order, _lpc_method)
+        xlpc = ref2pred(ref)
         # Get initial PSD estimate
         if zphase:
             frame = np.concatenate((frame[woff:], zp, frame[:woff]))
@@ -89,12 +91,13 @@ def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):
             buff = irfft(xspec)
             if zphase:
                 buff = np.roll(buff, nfft//2)
-            xlpc = lpc(buff, _lpc_order, _lpc_method)
+            ref, _ = lpc_parcor(buff, _lpc_order, _lpc_method)
+            xlpc = ref2pred(ref)
         return buff, filt, spsd
 
     # Now perform frame-level Wiener filtering on x
     srec = []
-    for xframe in stana(x, sr, wind, hop):
+    for xframe in stana(x, sr, wind, hop, synth=True):
         xclean, filt, spsd = wiener_iter_frame(xframe)
         srec.append(xclean)
 
@@ -134,7 +137,8 @@ def asnr(x, sr, wind, hop, nfft, noise=None, zphase=True, rule='wiener'):
     vad = []  # holds voice activity decision
     priori_m1 = np.zeros_like(npsd)
     posteri_m1 = np.zeros_like(npsd)
-    for i, xspec in enumerate(stft(x, sr, wind, hop, nfft, zphase=zphase)):
+    for i, xspec in enumerate(stft(x, sr, wind, hop, nfft, synth=True,
+                                   zphase=zphase)):
         xpsd = np.abs(xspec)**2
         posteri = xpsd / npsd
         posteri_prime = np.maximum(posteri - 1, 0)  # half-wave rectify
@@ -167,8 +171,8 @@ def asnr(x, sr, wind, hop, nfft, noise=None, zphase=True, rule='wiener'):
 def asnr_spec(noisyspec, rule='wiener'):
     """Implement the a-priori SNR estimation described by Scalart and Filho.
 
-    This is very similar t `asnr`, except it's computed directly on noisy
-    spectra instead of time-domain signals.
+    This is very similar to `asnr`, except it's computed directly on noisy
+    magnitude spectra instead of time-domain signals.
 
     Outputs
     -------
@@ -278,7 +282,8 @@ def asnr_activate(x, sr, wind, hop, nfft, noise=None, zphase=True,
     posteri_m1 = np.zeros_like(npsd_init)
     priori_m1 = np.zeros_like(npsd_init)
     llkr_m1 = np.zeros_like(npsd_init)
-    for nn, xspec in enumerate(stft(x, sr, wind, hop, nfft, zphase=zphase)):
+    for nn, xspec in enumerate(stft(x, sr, wind, hop, nfft, synth=True,
+                                    zphase=zphase)):
         if nn == 0:  # initial state
             xmag_m1 = np.abs(xspec)
             xpsd_m1 = xmag_m1**2
@@ -376,7 +381,8 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
     posteri_m1 = np.zeros_like(npsd_init)
     priori_m1 = np.zeros_like(npsd_init)
     llkr_m1 = np.zeros_like(npsd_init)
-    for nn, xspec in enumerate(stft(x, sr, wind, hop, nfft, zphase=zphase)):
+    for nn, xspec in enumerate(stft(x, sr, wind, hop, nfft, synth=True,
+                                    zphase=zphase)):
         if nn == 0:
             # inital state
             """
@@ -413,6 +419,53 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
     return xout
 
 
+def mmse_henriks(sig, sr, wind, hop, nfft, noise=None, alpha=.98, beta=.8, 
+                 rule='wiener'):
+    """Implement the MMSE method by Henriks et al for noise PSD estimation.
+
+    Hendriks, Richard C., Richard Heusdens, and Jesper Jensen.
+    "MMSE based noise PSD tracking with low complexity."
+    2010 IEEE International Conference on Acoustics, Speech and Signal
+    Processing. IEEE, 2010.
+    Retrieved from http://cas.et.tudelft.nl/pubs/0004266.pdf
+
+    Parameters
+    ----------
+    sig: array_like
+        Noisy speech signal to be processed.
+    sr: int
+        Sampling rate.
+    wind: array_like
+        Window function for analysis.
+    nfft: int
+        Number of DFT points.
+    alpha: float, optional
+        Recursive averaging coefficient for decision-directed a priori SNR.
+        Default to .98.
+    beta: float, optional
+        Recursive averaging coefficient for noise PSD.
+        Default to .8, as suggested by Henriks et al.
+    noise: array_like, optional
+        Optional examplary noise signal from which noise PSD is extracted.
+    rule: str, optional
+        A priori SNR-to-spectral gain rule. Default to 'wiener'.
+        Options are: wiener, specsub, ml
+
+    See Also
+    --------
+    noise.mmse_henriks
+
+    """
+    sigspec = stft(sig, sr, wind, hop, nfft, synth=True, zphase=True)
+    _, priori, _ = npsd_henriks(sigspec.real**2+sigspec.imag**2, noise,
+                                alpha, beta, rule)
+
+    irm = priori2filt(priori, rule)
+    xout = istft(sigspec*irm, sr, wind, hop, nfft, zphase=True)
+
+    return xout
+
+
 def asnr_optim(x, t, sr, wind, hop, nfft, noise=None, zphase=True,
                rule='wiener'):
     """Compute oracle mask for magnitude spectrogram."""
@@ -424,8 +477,9 @@ def asnr_optim(x, t, sr, wind, hop, nfft, noise=None, zphase=True,
         t = t[:siglen]
 
     xfilt = []
-    for xspec, tspec in zip(stft(x, sr, wind, hop, nfft, zphase=zphase),
-                            stft(t, sr, wind, hop, nfft, zphase=zphase)):
+    for xspec, tspec in zip(
+            stft(x, sr, wind, hop, nfft, synth=True, zphase=zphase),
+            stft(t, sr, wind, hop, nfft, synth=True, zphase=zphase)):
         nspec = xspec - tspec
         tpsd = np.abs(tspec) ** 2
         npsd = np.abs(nspec) ** 2
@@ -441,7 +495,7 @@ def asnr_optim(x, t, sr, wind, hop, nfft, noise=None, zphase=True,
     return xout
 
 
-def priori2filt(priori, rule):
+def priori2filt(priori, rule='wiener'):
     """Compute filter gains given a priori SNR."""
     if rule == 'wiener':
         return priori / (1+priori)

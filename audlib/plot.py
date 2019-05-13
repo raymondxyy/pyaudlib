@@ -103,7 +103,7 @@ def plot_cep(qindex, cepstrum, sr=None, show=True, save=None):
         fig.savefig(save)
 
 
-def specgram(sig, ax, time_axis=None, freq_axis=None):
+def specgram(sig, ax, time_axis=None, freq_axis=None, colorbar=True):
     """Plot a 2-D representation as a spectrogram.
 
     Warning: `sig` must be in the final numeric form (no complex numbers).
@@ -128,6 +128,7 @@ def specgram(sig, ax, time_axis=None, freq_axis=None):
         freq_axis = np.arange(sig.shape[1])
 
     spec = ax.pcolormesh(time_axis, freq_axis, sig.T, cmap='jet')
-    plt.colorbar(spec, ax=ax)
+    if colorbar:
+        plt.colorbar(spec, ax=ax)
 
     return

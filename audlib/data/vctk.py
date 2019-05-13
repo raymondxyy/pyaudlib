@@ -8,6 +8,7 @@ import numpy as np
 import pickle
 from scipy.io import wavfile
 from .dataset import SEDataset
+from .datatype import Audio, NoisySpeech
 
 
 class SEVCTKNoRev(SEDataset):
@@ -53,14 +54,14 @@ class SEVCTKNoRev(SEDataset):
 
         self.transform = transform
 
-        self._valid_files = []
+        self._filepaths = []
         if self.istest:
             for noisy1 in glob.iglob(
                 os.path.join(self.noisydir,
                              '{}/*1.wav'.format(self.testdir))):
                 # Second channel path and clean reference
                 noisy2 = noisy1[:-5] + '2.wav'
-                self._valid_files.append((noisy1, noisy2))
+                self._filepaths.append((noisy1, noisy2))
         else:
             for root, dirs, files in os.walk(self.noisydir):
                 # Sweep first channel
@@ -72,24 +73,27 @@ class SEVCTKNoRev(SEDataset):
                     noise = os.path.join(self.noisedir,
                                          "{}_{}_1_CH1.raw".format(
                                              bname[12:15], bname[9:11]))
-                    self._valid_files.append((noisy1, noisy2, meta, noise))
+                    self._filepaths.append((noisy1, noisy2, meta, noise))
 
     @property
-    def valid_files(self):
+    def filepaths(self):
         """Collect all audio files."""
-        return self._valid_files
+        return self._filepaths
+
+    def __len__(self):
+        return len(self._filepaths)
 
     def __getitem__(self, idx):
         """Get idx-th path to audio sample."""
         if self.istest:  # test mode produces 2-chan audios
-            noisy1, noisy2 = self.valid_files[idx]
+            noisy1, noisy2 = self.filepaths[idx]
             sr1, x1 = wavfile.read(noisy1)
             sr2, x2 = wavfile.read(noisy2)
             assert sr1 == sr2
-            sample = {'chan1': {'sr': sr1, 'data': x1},
-                      'chan2': {'sr': sr1, 'data': x2}}
+            sample = NoisySpeech(noisy=[Audio(x1, sr1), Audio(x2, sr2)])
+
         else:  # train/valid mode produces 2-chan audios + clean speech
-            noisy1, noisy2, meta, noise = self.valid_files[idx]
+            noisy1, noisy2, meta, noise = self.filepaths[idx]
             sr, x1 = wavfile.read(noisy1)
             sr2, x2 = wavfile.read(noisy2)
             assert sr == sr2
@@ -120,10 +124,8 @@ class SEVCTKNoRev(SEDataset):
             x1 /= max_A
             xC /= max_A
 
-            sample = {'chan1': {'sr': sr, 'data': x1},
-                      'chan2': {'sr': sr, 'data': x2},
-                      'clean': {'sr': sr, 'data': xC}
-                      }
+            sample = NoisySpeech(noisy=[Audio(x1, sr), Audio(x2, sr)],
+                                 clean=Audio(xC, sr))
 
         if self.transform:
             sample = self.transform(sample)
@@ -177,7 +179,7 @@ class SEVCTK2chan(SEDataset):
         self.transform = transform
         self.select = select
 
-        self._valid_files = []
+        self._filepaths = []
         if self.istest:
             for noisy1 in glob.iglob(
                     os.path.join(self.noisydir,
@@ -185,7 +187,7 @@ class SEVCTK2chan(SEDataset):
                 # Second channel path and clean reference
                 noisy2 = noisy1[:-5] + '2.wav'
                 # Group filenames and append to the list
-                self._valid_files.append((noisy1, noisy2))
+                self._filepaths.append((noisy1, noisy2))
                 for pp in noisy1, noisy2:
                     assert os.path.exists(pp), '{} does not exist!'.format(pp)
         else:
@@ -201,34 +203,37 @@ class SEVCTK2chan(SEDataset):
                                              bname[12:15], bname[9:11],
                                              self.subset))
                     # Group filenames and append to the list
-                    self._valid_files.append((noisy1, noisy2, meta, noise))
+                    self._filepaths.append((noisy1, noisy2, meta, noise))
                     for pp in noisy1, noisy2, meta, noise:
                         assert os.path.exists(pp), \
                             '{} does not exist!'.format(pp)
 
     @property
-    def valid_files(self):
+    def filepaths(self):
         """Collect all valid files."""
-        return self._valid_files
+        return self._filepaths
+
+    def __len__(self):
+        return len(self._filepaths)
 
     def __getitem__(self, idx):
         """Get idx-th path to audio sample."""
         if self.select is not None:
-            tstart, tend = self.select(self.valid_files[idx][0])
+            tstart, tend = self.select(self.filepaths[idx][0])
         else:
             tstart = 0
             tend = None
 
         if self.istest:  # test mode produces 2-chan audios
-            noisy1, noisy2 = self.valid_files[idx]
+            noisy1, noisy2 = self.filepaths[idx]
             sr1, x1 = wavfile.read(noisy1)
             sr2, x2 = wavfile.read(noisy2)
             assert sr1 == sr2
-            sample = {'chan1': {'sr': sr1, 'data': x1[tstart:tend]},
-                      'chan2': {'sr': sr1, 'data': x2[tstart:tend]}
-                      }
+            sample = NoisySpeech(noisy=[Audio(x1[tstart:tend], sr1),
+                                        Audio(x2[tstart:tend], sr1)])
+ 
         else:  # train/valid mode produces 2-chan audios + clean speech
-            noisy1, noisy2, meta, noise = self.valid_files[idx]
+            noisy1, noisy2, meta, noise = self.filepaths[idx]
             sr, x1 = wavfile.read(noisy1)
             sr2, x2 = wavfile.read(noisy2)
             assert sr == sr2
@@ -254,10 +259,9 @@ class SEVCTK2chan(SEDataset):
 
             # Recover clean (reverberated) speech
             xC = x1 - n1
-            sample = {'chan1': {'sr': sr, 'data': x1[tstart:tend]},
-                      'chan2': {'sr': sr, 'data': x2[tstart:tend]},
-                      'clean': {'sr': sr, 'data': xC[tstart:tend]}
-                      }
+            sample = NoisySpeech(noisy=[Audio(x1[tstart:tend], sr),
+                                        Audio(x2[tstart:tend], sr)],
+                                 clean=Audio(xC[tstart:tend], sr))
 
         if self.transform:
             sample = self.transform(sample)

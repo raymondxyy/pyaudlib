@@ -14,13 +14,13 @@ After cloning the repository to your working directory, Do the following.
 	- resampy
 	- SoundFile
 
-3. Activate the virtual environmet with `pipenv shell`. You should see (pyaudlib) appearing at the beginning of the command prompt now.
+3. Activate the virtual environment with `pipenv shell`. You should see (pyaudlib) appearing at the beginning of the command prompt now.
 
 4. cd into pyaudlib/tools/sph2pipe/ and compile the package with `gcc -o sph2pipe *.c -lm`. Make sure the compiled binary `sph2pipe` is executable by calling `./sph2pipe`. A help message should appear.
 
 5. Add pyaudlib/ (full path) to `PYTHONPATH` in profiles such as `~/.bashrc` and source it with `. ~/.bashrc`.
 
-6. cd back to pyaudlib/ and verify the package with `pytest tests/test_window.py`. If the test is passed, you're good to go. (NOTE: normally pytest without any argument should just work, but I'm having a bug on matplotlib's backend at the moment on burro.)
+6. cd back to pyaudlib/ and verify the package with `pytest tests/sig`. If the test is passed, you're good to go. (NOTE: normally pytest without any argument should just work, but I'm having a bug on matplotlib's backend at the moment on burro.)
 
 ---
 Created 11/30/2018, 5:53:54 PM

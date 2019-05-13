@@ -1,7 +1,5 @@
-# Some helper functions for reading configuration files in pyaudiolib.cfg
-#
-# Author: Raymond Xia (yangyanx@andrew.cmu.edu)
-#
+"""Some helper functions for reading configuration files in audlib.cfg."""
+
 # Use cases:
 #   1. Users run scripts and call functions blindly. By default, the current
 #      active configuration `__active__.cfg` will be loaded and used. The active
@@ -22,8 +20,7 @@ import configparser as CP
 import os
 import subprocess
 from pprint import pprint
-from .io.batch import dir2files
-from pdb import set_trace
+from .io.batch import lsfiles
 
 __cfgdir__ = os.path.abspath(os.path.join(os.path.dirname(__file__), '../cfg'))
 __active__ = os.path.join(__cfgdir__, '__active__.cfg')
@@ -155,7 +152,7 @@ def cfgstatus():
 
 def __cfglist__():
     """List all existing configurations in `cfg/`. Exclude __active__.cfg."""
-    cpaths = dir2files(__cfgdir__, lambda s: s.endswith('.cfg'))
+    cpaths = lsfiles(__cfgdir__, lambda s: s.endswith('.cfg'))
     cnames = map(lambda p: os.path.basename(p).split('.')[0], cpaths)
     return cpaths, cnames
 

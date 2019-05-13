@@ -1,5 +1,6 @@
 """Some functions to deal with I/O of different audio file formats."""
 
+from random import randrange
 import soundfile as sf
 from resampy import resample
 import numpy as np
@@ -46,6 +47,7 @@ def sphereinfo(path):
 
 class SphereInfo(object):
     """soundfile.info interface for embedded-shorten."""
+    __slots__ = 'samplerate', 'frames'
 
     def __init__(self, path):
         """Read metadata of a sphere file."""
@@ -77,6 +79,22 @@ def audioinfo(path):
         return SphereInfo(path)
 
 
+def sphereread(path, start=0, stop=None):
+    """Read a embedded-shorten .sph file using sph2pipe.
+
+    Assume `stop` does not exceed total duration.
+    """
+    assert start >= 0, "Must start at non-negative sample point."
+    if stop is None:
+        dur = "{}:".format(start)
+    else:
+        dur = "{}:{}".format(start, stop)
+    cmd = [_sph2pipe, '-f', 'wav', '-s', dur, path]
+    x, xsr = sf.read(io.BytesIO(subprocess.check_output(cmd)))
+
+    return x, xsr
+
+
 def audioread(path, sr=None, start=0, stop=None, force_mono=False,
               norm=False, verbose=False):
     """Read audio from path and return an numpy array.
@@ -103,17 +121,26 @@ def audioread(path, sr=None, start=0, stop=None, force_mono=False,
     except RuntimeError:  # fix for sph pcm-embedded shortened v2
         if verbose:
             print('WARNING: Audio type not supported. Trying sph2pipe...')
-        wavbytes = subprocess.check_output([_sph2pipe, '-f', 'wav', path])
-        x, xsr = sf.read(io.BytesIO(wavbytes), start=start, stop=stop)
+        x, xsr = sphereread(path, start=start, stop=stop)
 
-    if force_mono and (len(x.shape) > 1):
-        x = np.sum(x, axis=1)/2.  # stereo->mono
-    if norm:  # normalize maximum absolute amplitude to 1
-        x /= np.max(np.abs(x))
-    if (sr is not None) and (xsr != sr):  # need sample rate conversion
-        x = resample(x, xsr, sr)
-        return x, sr
-    else:
+    if len(x.shape) == 1:  # mono
+        if sr and (xsr != sr):
+            x = resample(x, xsr, sr)
+            xsr = sr
+        if norm:
+            x /= np.max(np.abs(x))
+        return x, xsr
+    else:  # multi-channel
+        x = x.T
+        if sr and (xsr != sr):
+            x = resample(x, xsr, sr, axis=1)
+            xsr = sr
+        if force_mono:
+            x = x.sum(axis=0)/x.shape[0]
+        if norm:
+            for chan in range(x.shape[0]):
+                x[chan, :] /= np.max(np.abs(x[chan, :]))
+
         return x, xsr
 
 
@@ -147,3 +174,123 @@ def audiowrite(data, sr, outpath, norm=True, verbose=False):
     sf.write(outpath, data, sr)
 
     return
+
+
+def chk_duration(path, minlen=None, maxlen=None, unit='second'):
+    """Check if audio from path satisfies duration requirement.
+
+    Parameters
+    ----------
+    path: str
+        File path to audio.
+    minlen: float, optional
+        Inclusive minimum length of selection in seconds or samples.
+        Default to any duration.
+    maxlen: float, optional
+        Exclusive maximum length of selection in seconds or samples.
+        Default to any duration.
+    unit: str, optional
+        The unit in which `minlen` and `maxlen` are interpreted.
+        Options are:
+            - 'second' (default)
+            - 'sample'
+
+    Returns
+    -------
+    okay: bool
+        True if all conditions are satisfied. False otherwise.
+
+    """
+    if (minlen is None) and (maxlen is None):
+        return True
+
+    info = audioinfo(path)
+    sr, sigsize = info.samplerate, info.frames
+    if unit == 'second':
+        minlen = int(minlen * sr) if (minlen is not None) else None
+        maxlen = int(maxlen * sr) if (maxlen is not None) else None
+    if minlen is not None and (sigsize < minlen):
+        return False
+    if maxlen is not None and (sigsize >= maxlen):
+        return False
+
+    return True
+
+
+def shorter_than(path, duration, unit='second'):
+    """Check if audio is shorter than duration in unit."""
+    return chk_duration(path, maxlen=duration, unit=unit)
+
+
+def no_shorter_than(path, duration, unit='second'):
+    """Check if audio is not shorter than duration in unit."""
+    return not shorter_than(path, duration, unit=unit)
+
+
+def longer_than(path, duration, unit='second'):
+    """Check if audio is longer than duration in unit."""
+    if unit == 'sample':
+        duration += 1
+    return chk_duration(path, minlen=duration, unit=unit)
+
+
+def no_longer_than(path, duration, unit='second'):
+    """Check if audio is not longer than duration in unit."""
+    return not longer_than(path, duration, unit=unit)
+
+
+def randsel(path, minlen=0, maxlen=None, unit="second"):
+    """Randomly select a portion of audio from path.
+
+    Parameters
+    ----------
+    path: str
+        File path to audio.
+    minlen: float, optional
+        Inclusive minimum length of selection in seconds or samples.
+    maxlen: float, optional
+        Exclusive maximum length of selection in seconds or samples.
+    unit: str, optional
+        The unit in which `minlen` and `maxlen` are interpreted.
+        Options are:
+            - 'second' (default)
+            - 'sample'
+
+    Returns
+    -------
+    tstart, tend: tuple of int
+        integer index of selection
+
+    """
+    info = audioinfo(path)
+    sr, sigsize = info.samplerate, info.frames
+    if unit == 'second':
+        minoffset = int(minlen*sr)
+        maxoffset = int(maxlen*sr) if maxlen else sigsize
+    else:
+        minoffset = minlen
+        maxoffset = maxlen if maxlen else sigsize
+
+    assert (minoffset < maxoffset) and (minoffset <= sigsize), \
+        f"""BAD: siglen={sigsize}, minlen={minoffset}, maxlen={maxoffset}"""
+
+    # Select begin sample
+    tstart = randrange(max(1, sigsize-minoffset))
+    tend = randrange(tstart+minoffset, min(tstart+maxoffset, sigsize+1))
+
+    return tstart, tend
+
+
+def randread(fpath, minlen=None, maxlen=None, unit='second'):
+    """Randomly read a portion of audio from file."""
+    nstart, nend = randsel(fpath, minlen, maxlen, unit)
+    return audioread(fpath, start=nstart, stop=nend)
+
+
+def fixread(fpath, duration, unit='second'):
+    """Randomly read a fix-length portion of audio from file."""
+    if unit == 'second':  # convert to samples
+        duration = int(duration * audioinfo(fpath).samplerate)
+    nstart, nend = randsel(fpath, minlen=duration, maxlen=duration+1,
+                           unit='sample')
+    return audioread(fpath, start=nstart, stop=nend)

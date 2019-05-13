@@ -1,59 +1,99 @@
 """Dataset Classes for Speech Enhancement Applications."""
+import os
+from random import randint, randrange
 
-import numpy as np
-
-from ..io.batch import dir2files
-from ..sig.util import additive_noise
-from .dataset import Dataset, SEDataset
-from .util import chk_duration, randread
+from ..io.audio import audioread, no_shorter_than, randread
+from ..sig.util import add_noise
+from .dataset import AudioDataset, SEDataset
+from .datatype import Audio, NoisySpeech
 
 
-class RandSample(Dataset):
-    """Create a dataset by random sampling of all valid audio files."""
+class RandSample(AudioDataset):
+    """Create a dataset by random sampling of all valid audio files.
 
-    def __init__(self, root, sr=None, mindur_per_file=None,
-                 exts=('.wav', '.sph', '.flac'),
-                 sampdur_range=(None, None)):
+    This class sacrifices flexibility for a simple interface. If it doesn't
+    cover your use case, you can use the more general dataset.AudioDataset.
+    """
+
+    @staticmethod
+    def isaudio(path):
+        return path.endswith(('.wav', '.flac', '.sph'))
+
+    def __init__(self, root, minlen=None, maxlen=None, unit='second',
+                 filt=None, transform=None, cache=False):
         """Instantiate a random sampling dataset.
 
         Parameters
         ----------
         root: str
             Dataset root directory.
-        sr: int, optional
-            Forced sampling rate. Default to None, which accepts any rate.
-        mindur_per_file: float, optional
-            Minimum duration of each audio file in seconds. Shorter files
-            will be ignored.
-        exts: tuple of str, optional
-            Accepted file extensions.
-            Default to '.wav', '.sph', '.flac'.
-        sampdur_range: tuple of float, optional
-            Minimum and maximum duration of each sample in seconds to be read.
-            Default to unconstrained lengths.
+        filt: callable, optional
+            A function to decide if a file path should be accepted or not.
+            Default to None, which accepts .wav, .flac, and .sph.
+        read: callabel, optional
+            Function to read in an audio file.
+        minlen: float or int, optional
+            Minimum duration of each sample in seconds or samples to be read.
+            Default to None, which means unconstrained lengths.
+        maxlen: float or int, optional
+            Maximum duration of each sample in seconds or samples to be read.
+            Default to None, which means unconstrained lengths.
+        unit: str, optional
+            The unit in which `minlen` and `maxlen` are interpreted.
+            Options are:
+                - 'second' (default)
+                - 'sample'
+        transform: callable
+            Tranform to be applied on samples.
+        cache: bool
+            Default only stores file paths and portion to read. If True,
+            all signals will be read to memory in one shot, and indexing
+            will be just slicing from the read arrays.
 
         """
-        super(RandSample, self).__init__()
-        self.root = root
-        self.sr = sr
-        self.mindur_per_file = mindur_per_file
-        self.minlen, self.maxlen = sampdur_range
-        self.exts = exts
+        self.minlen, self.maxlen = minlen, maxlen
+        self.unit = unit
+        self.transform = transform
 
-        self._all_files = dir2files(
-            self.root, lambda path: path.endswith(exts)
-            and chk_duration(path, minlen=self.mindur_per_file))
+        def _filt(path):
+            """Filter based on audio lengths."""
+            if filt:
+                return filt(path) and no_shorter_than(path, minlen, unit)
+            return self.isaudio(path) and no_shorter_than(path, minlen, unit)
 
-    @property
-    def all_files(self):
-        """Retrieve all file paths."""
-        return self._all_files
+        super(RandSample, self).__init__(root, filt=_filt)
+
+        # Not recommended for large files
+        if cache:
+            self._cached = []
+            for path in self._filepaths:
+                self._cached.append(audioread(path))
+        else:
+            self._cached = None
 
     def __getitem__(self, idx):
-        """Get idx-th sample."""
-        data, _ = randread(self.all_files[idx], sr=self.sr,
-                           minlen=self.minlen, maxlen=self.maxlen)
-        sample = {'data': data, 'sr': self.sr}
+        """Get idx-th sample, with the option to retreive cached sample."""
+        if self._cached is not None:
+            sig, sr = self._cached[idx]
+            if self.unit == 'second':
+                minoffset = int(self.minlen*sr)
+                maxoffset = int(self.maxlen*sr) if self.maxlen else len(sig)
+            else:
+                minoffset = self.minlen
+                maxoffset = self.maxlen if self.maxlen else len(sig)
+            assert (minoffset < maxoffset) and (minoffset <= len(sig)), \
+                f"""BAD: siglen={len(sig)}, minlen={minoffset},
+                    maxlen={maxoffset}"""
+            nstart = randrange(max(1, len(sig)-minoffset))
+            nend = randrange(nstart+minoffset,
+                             min(nstart+maxoffset, len(sig)+1))
+            sample = Audio(sig[nstart:nend], sr)
+        else:
+            pp = os.path.join(self.root, self.filepaths[idx])
+            sample = Audio(*randread(pp, self.minlen, self.maxlen, self.unit))
+
+        if self.transform:
+            sample = self.transform(sample)
 
         return sample
 
@@ -68,11 +108,12 @@ class Additive(SEDataset):
     """
 
     def __init__(self, targetset, noiseset,
-                 snrs=[-np.inf, -20, -15, -10, -5, 0, 5, 10, 15, 20, np.inf]):
+                 snrs=[-20, -15, -10, -5, 0, 5, 10, 15, 20],
+                 transform=None):
         """Build a synthetic additive dataset.
 
-        The class will mix every target signal with every noise signal at
-        every specified SNR.
+        This class will mix a randomly chosen noise at a randomly chosen SNR
+        into each signal in the target set.
 
         Parameters
         ----------
@@ -84,7 +125,7 @@ class Additive(SEDataset):
             {'sr': sampling rate, 'data': signal}
         snrs: list of int/float/np.inf, optional
             SNRs to be randomly sampled.
-            Default to [-inf, -20, -15, -10, -5, 0, 5, 10, 15, 20, +inf].
+            Default to [-20, -15, -10, -5, 0, 5, 10, 15, 20].
 
         See Also
         --------
@@ -95,38 +136,26 @@ class Additive(SEDataset):
         self.targetset = targetset
         self.noiseset = noiseset
         self.snrs = snrs
+        self.transform = transform
 
     def __len__(self):
         """Each speech file is mixed with every noise file, at each SNR."""
-        return len(self.targetset) * len(self.noiseset) * len(self.snrs)
+        return len(self.targetset)
 
     def __getitem__(self, idx):
-        """Retrieve idx-th sample.
+        """Retrieve idx-th sample."""
+        samp_clean = self.targetset[idx]
+        samp_noise = self.noiseset[randint(0, len(self.noiseset)-1)]
+        assert samp_clean.samplerate == samp_noise.samplerate,\
+            "Inconsistent sampling rate!"
+        snr = self.snrs[randint(0, len(self.snrs)-1)]
 
-        Exhaust all speech/noise/snr combinations in row-major order:
-        0 --> s[0],n[0],snr[0]
-        1 --> s[0],n[0],snr[1] ...
-        k --> s[0],n[1],snr[0] ...
-        """
-        samp_clean = self.targetset[idx // (len(self.noiseset)*len(self.snrs))]
-        samp_noise = self.noiseset[(idx % (len(self.noiseset)*len(self.snrs))
-                                    ) // len(self.snrs)]
-        snr = self.snrs[idx % len(self.snrs)]
+        samp_noisy = Audio(add_noise(samp_clean.signal, samp_noise.signal,
+                           snr=snr), samp_clean.samplerate)
 
-        clean = samp_clean['data']
-        noise = additive_noise(clean, samp_noise['data'], snr=snr)
+        sample = NoisySpeech(samp_noisy, samp_clean, samp_noise, snr)
 
-        if snr == -np.inf:  # only output noise to simulate negative infinity
-            chan1 = noise
-            clean = np.zeros_like(clean)
-        else:
-            chan1 = clean + noise
-
-        sample = {'sr': samp_clean['sr'],
-                  'chan1': chan1,
-                  'clean': clean,
-                  'noise': noise,
-                  'snr': snr
-                  }
+        if self.transform:
+            sample = self.transform(sample)
 
         return sample

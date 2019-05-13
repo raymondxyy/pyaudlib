@@ -1,23 +1,31 @@
 from audlib.data.enhance import RandSample, Additive
+from audlib.sig.window import hamming
+
+# Pre-determined transform to be applied on signal
+sr = 16000
+window_length = 0.032
+hopfrac = 0.25
+wind = hamming(int(window_length*sr), hop=hopfrac)
+nfft = 512
 
 
 def test_randsamp():
     """Test for random sampling class."""
-    wsjspeech = RandSample("/home/xyy/data/wsj0/", sr=16000,
-                           mindur_per_file=3., sampdur_range=(3., 8.),
-                           exts=('.wv1',))
-    print(len(wsjspeech))
+    wsjspeech = RandSample("/home/xyy/data/wsj0/",
+                           minlen=3., maxlen=8.,
+                           filt=lambda p: p.endswith('.wv1'))
+    assert len(wsjspeech) == 34287
 
 
 def test_additive():
     """Test for additive noise."""
-    SR = 16000  # fix sampling rate
-    wsjspeech = RandSample("/home/xyy/data/wsj0/", sr=SR, mindur_per_file=3.,
-                           sampdur_range=(3., 8.), exts=('.wv1',))
-    noizeus = RandSample("/home/xyy/Documents/MATLAB/loizou/Databases/noise/",
-                         sr=SR, mindur_per_file=3., sampdur_range=(3., None))
+    wsjspeech = RandSample("/home/xyy/data/wsj0/",
+                           minlen=3., maxlen=8.,
+                           filt=lambda p: p.endswith('.wv1'))
+    noizeus = RandSample(
+        "/home/xyy/Documents/MATLAB/loizou/Databases/noise16k/", minlen=3.)
     wsj_noizues = Additive(wsjspeech, noizeus)  # noisy speech dataset
-    print(len(wsj_noizues))
+    assert len(wsj_noizues) == len(wsjspeech)
 
 
 if __name__ == '__main__':

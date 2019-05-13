@@ -26,12 +26,12 @@ class ToTensor(object):
         def _to_tensor(feat):
             return torch.from_numpy(feat.astype(self.dtype))
 
-        if isinstance(featlst, (tuple, list)):
+        if isinstance(featlst, np.ndarray):
+            return _to_tensor(featlst)
+        elif isinstance(featlst, (tuple, list)):
             return tuple(map(_to_tensor, featlst))
         elif isinstance(featlst, dict):
             return {k: _to_tensor(v) for k, v in featlst.items()}
-        elif isinstance(featlst, np.ndarray):
-            return _to_tensor(featlst)
         else:
             raise ValueError('Incomprehensible type!')
 
@@ -56,7 +56,7 @@ class ToDevice(object):
             return tensor.to(device=self.device, dtype=self.dtype)
 
         if isinstance(tensorlst, (tuple, list)):
-            return map(_to_device, tensorlst)
+            return tuple(map(_to_device, tensorlst))
         elif isinstance(tensorlst, dict):
             return {k: _to_device(v) for k, v in tensorlst.items()}
         else:

@@ -126,13 +126,20 @@ ERB_ORDER = 1
 # Malcolm Slaney @ Interval, June 11, 1998.
 # (c) 1998 Interval Research Corporation
 # Thanks to Alain de Cheveigne' for his suggestions and improvements.
-def erb_fbank(sig, A0, A11, A12, A13, A14, A2, B0, B1, B2, gain):
+def erb_fbank(sig, A0, A11, A12, A13, A14, A2, B0, B1, B2, gain, cascade=True):
     """Filter a signal using ERB filterbanks."""
-    y1 = signal.lfilter([A0/gain, A11/gain, A2/gain], [B0, B1, B2], sig)
-    y2 = signal.lfilter([A0, A12, A2], [B0, B1, B2], y1)
-    y3 = signal.lfilter([A0, A13, A2], [B0, B1, B2], y2)
-    y = signal.lfilter([A0, A14, A2], [B0, B1, B2], y3)
-    return y
+    if cascade:
+        y1 = signal.lfilter([A0/gain, A11/gain, A2/gain], [B0, B1, B2], sig)
+        y2 = signal.lfilter([A0, A12, A2], [B0, B1, B2], y1)
+        y3 = signal.lfilter([A0, A13, A2], [B0, B1, B2], y2)
+        y = signal.lfilter([A0, A14, A2], [B0, B1, B2], y3)
+        return y
+    else:  # merge the difference EQ above into one
+        b = np.convolve(np.convolve([A0, A11, A2], [A0, A12, A2]),
+                        np.convolve([A0, A13, A2], [A0, A14, A2])) / gain
+        a = np.convolve(np.convolve([B0, B1, B2], [B0, B1, B2]),
+                        np.convolve([B0, B1, B2], [B0, B1, B2]))
+        return signal.lfilter(b, a, sig)
 
 
 def erb_freqz(A0, A11, A12, A13, A14, A2, B0, B1, B2, gain, nfft):

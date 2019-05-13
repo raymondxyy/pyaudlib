@@ -5,8 +5,6 @@ from audlib.io.audio import audioread
 from audlib.sig.window import hamming
 
 from audlib.sig.stproc import stana
-from audlib.plot import cepline
-import matplotlib.pyplot as plt
 
 sig, sr = audioread('samples/welcome16k.wav')
 window_length = 0.032
@@ -17,8 +15,8 @@ nfft = 512
 
 def test_stft():
     """Test STFT and iSTFT."""
-    sig_stft = stft(sig, sr, wind, hopfrac, nfft)
-    sigsynth = istft(sig_stft, sr, wind, hopfrac, nfft)
+    sig_stft = stft(sig, sr, wind, hopfrac, nfft, synth=True, zphase=True)
+    sigsynth = istft(sig_stft, sr, wind, hopfrac, nfft, zphase=True)
 
     assert np.allclose(sig, sigsynth[:len(sig)])
 
@@ -59,21 +57,10 @@ def test_cep():
 
 def test_rcep():
     ncep = 500
-    for frame in stana(sig, sr, wind, hopfrac, trange=(.652, None)):
+    for frame in stana(sig[int(.652*sr):], sr, wind, hopfrac):
         cep1 = realcep(frame, ncep)  # log-magnitude method
         cep2 = realcep(frame, ncep, comp=True, ztrans=True)  # ZT method
         cep3 = realcep(frame, ncep, comp=True)  # complex log method
-        qindex = np.arange(ncep)[:]
-        fig, ax = plt.subplots(3, 1)
-        line1 = cepline(qindex, cep1[qindex], ax[0])
-        line1.set_label('DFT Method: Real Logarithm')
-        line2 = cepline(qindex, cep2[qindex], ax[1])
-        line2.set_label('Z-Transform Method')
-        line3 = cepline(qindex, cep3[qindex], ax[2])
-        line3.set_label('DFT Method: Complex Logarithm')
-        for axe in ax:
-            axe.legend()
-        fig.savefig('out.pdf')
         #assert np.allclose(cep1, cep2)
         break
 

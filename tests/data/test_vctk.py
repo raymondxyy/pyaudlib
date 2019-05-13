@@ -8,17 +8,14 @@ def test_VCTK2chan():
 
     def _testset():
         db = SEVCTK2chan(root, mode='test', testdir='*')
-        print("Entire test set samples: [{}]".format(len(db)))
         return len(db) == 5184
 
     def _trainset():
         db = SEVCTK2chan(root, mode='train')
-        print("Training set samples: [{}]".format(len(db)))
         return len(db) == 10368
 
     def _validset():
         db = SEVCTK2chan(root, mode='valid')
-        print("Validation set samples: [{}]".format(len(db)))
         return len(db) == 2592
 
     assert _trainset()
@@ -31,17 +28,14 @@ def test_VCTKNoRev():
 
     def _testset():
         db_test = SEVCTKNoRev(root, mode='test', testdir='*')
-        print("Entire test set samples: [{}]".format(len(db_test)))
         return len(db_test) == 44526
 
     def _trainset():
         db_train = SEVCTKNoRev(root, mode='train')
-        print("Training set samples: [{}]".format(len(db_train)))
         return len(db_train) == 29467
 
     def _validset():
         db_valid = SEVCTKNoRev(root, mode='valid')
-        print("Validation set samples: [{}]".format(len(db_valid)))
         return len(db_valid) == 6959
 
     assert _testset()

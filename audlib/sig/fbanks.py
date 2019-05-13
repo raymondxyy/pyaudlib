@@ -1,11 +1,5 @@
-"""FilterBANKS for audio analysis and synthesis.
-
-#TODO:
-    - [-] LinFreq: Linear-frequency filterbank (STFT filterbank view)
-    - [x] MelFreq: Mel-frequency filterbank
-    - [-] Gammatone: Gammatone filterbank
-
-"""
+"""FilterBANKS for audio analysis and synthesis."""
+import math
 
 import numpy as np
 from numpy.fft import rfft, fft
@@ -13,6 +7,8 @@ from scipy.fftpack import dct
 
 from .auditory import hz2mel, mel2hz
 from .auditory import erb_space, erb_filters, erb_fbank, erb_freqz
+from .window import hamming
+from .temporal import convdn, conv
 
 
 class Filterbank(object):
@@ -20,7 +16,7 @@ class Filterbank(object):
 
     All types of filterbanks should subclass this class and implement:
         * __len__(): number of filterbanks
-        * __get_item__(i): i-th filter object
+        * __getitem__(i): i-th filter object
         * freqz(i): frequency response of i-th filter
         * filter(sig, i): filter signal `sig` by i-th filter
     """
@@ -160,12 +156,15 @@ class MelFreq(Filterbank):
 
         # Finally, cache values for each filter
         self.filts = []
+        self.wgts = np.zeros((nfft//2+1, nchan))
         for ii in range(self.nchan):
             idx = row == ii
             if unity:
-                self.filts.append((col[idx]+dfl, val[idx]/sum(val[idx])))
+                dftbin, dftwgt = col[idx]+dfl, val[idx]/sum(val[idx])
             else:
-                self.filts.append((col[idx]+dfl, val[idx]))
+                dftbin, dftwgt = col[idx]+dfl, val[idx]
+            self.filts.append((dftbin, dftwgt))
+            self.wgts[dftbin, ii] = dftwgt
 
     def __len__(self):
         """Return the number of frequency channels."""
@@ -189,17 +188,13 @@ class MelFreq(Filterbank):
         dft_sig = rfft(sig, self.nfft)
         return val.dot(dft_sig[dfb])
 
-    def melspec(self, sig):
-        """Return mel log spectrum of a signal."""
-        out = np.zeros(self.nchan)
-        for kk in range(self.nchan):
-            dfb, val = self.filts[kk]
-            out[kk] = val.dot(np.abs(rfft(sig, self.nfft)[dfb])**2)
-        return np.log(out)
+    def melspec(self, powerspec):
+        """Return the mel spectrum of a signal."""
+        return powerspec @ self.wgts
 
-    def mfcc(self, sig):
+    def mfcc(self, powerspec):
         """Return mel-frequency cepstral coefficients (MFCC)."""
-        return dct(self.melspec(sig), norm='ortho')
+        return dct(np.log(self.melspec(powerspec)), norm='ortho')
 
 
 class Gammatone(Filterbank):
@@ -251,12 +246,153 @@ class Gammatone(Filterbank):
         """Get filter coefficients of k-th channel."""
         return self.filters[k]
 
-    def freqz(self, k, nfft=None):
-        """Compute k-th channel's frequency reponse."""
-        if nfft is None:
-            nfft = 1024
-        return erb_freqz(*self.filters[k], nfft)
+    def freqz(self, k, nfft=1024, powernorm=False):
+        """Compute k-th channel's frequency reponse.
 
-    def filter(self, sig, k):
+        Parameters
+        ----------
+        k: int
+            ERB frequency channel.
+        nfft: int, None
+            Number of linear frequency points.
+        powernorm: bool, False
+            Normalize power to unity if True.
+        """
+        ww, hh = erb_freqz(*self.filters[k], nfft)
+        if powernorm:
+            hh /= sum(hh.real**2 + hh.imag**2)
+
+        return ww, hh
+
+    def filter(self, sig, k, cascade=False):
         """Filter signal with k-th channel."""
-        return erb_fbank(sig, *self.filters[k])
+        return erb_fbank(sig, *self.filters[k], cascade=cascade)
+
+    def gammawgt(self, nfft, powernorm=False, squared=True):
+        """Return the Gammatone weighting function for STFT.
+
+        Parameters
+        ----------
+        nfft: int
+            Number of DFT points.
+        powernorm: bool, False
+            Normalize power of Gammatone weighting function to unity.
+        squared: bool, True
+            Apply squared Gammtone weighting.
+        """
+        wts = np.empty((nfft//2+1, self.num_chan))
+        for k in range(self.num_chan):
+            wts[:, k] = np.abs(self.freqz(k, nfft, powernorm)[1][:nfft//2+1])
+
+        if squared:
+            wts = wts**2
+
+        return wts
+
+
+class ConstantQ(Filterbank):
+    """Direct implementation of Judith Brown's Constant Q transform (CQT)."""
+
+    def __init__(self, sr, fmin, bins_per_octave=12, fmax=None, nchan=None,
+                 zphase=True):
+        """Instantiate a constant Q transform class.
+
+        Parameters
+        ----------
+        sr: int or float
+            Sampling rate.
+        fmin: int or float
+            Lowest center frequency of the filterbank.
+            Note that all other center frequencies are derived from this.
+        bins_per_octave: int
+            Number of bins per octave (double frequency).
+            Default to 12, which corresponds to one semitone.
+        fmax: int or float
+            Highest center frequency of the filterbank.
+            Default to None, which assumes Nyquist. If `nchan` is set, `fmax`
+            will be ignored.
+        nchan: int
+            Total number of frequency bins.
+            Default to None, which is determined from other parameters. If set,
+            `fmax` will be adjusted accordingly.
+        zphase: bool
+            Center each window at time 0 rather than (Nk-1)//2. This is helpful
+            for mitigating the effect of group delay at low frequencies.
+            Default to yes.
+
+        """
+        assert fmin >= 100, "Small center frequencies are not supported."
+        if nchan:  # re-calculate fmax
+            self.nchan = nchan
+            fmax = fmin * 2**(nchan / bins_per_octave)
+            assert fmax <= sr/2,\
+                "fmax exceeds Nyquist! Consider reducing nchan or fmin."
+            assert nchan == math.ceil(bins_per_octave*np.log2(fmax/fmin))
+        else:
+            fmax = fmax if fmax else sr/2
+            self.nchan = math.ceil(bins_per_octave * np.log2(fmax/fmin))
+        self.sr = sr
+        self.qfactor = 1 / (2**(1/bins_per_octave) - 1)
+        self.cfs = fmin * 2**(np.arange(self.nchan)/bins_per_octave)  # fcs
+        self.zphase = zphase
+        self.filts = []
+        for ii, k in enumerate(range(self.nchan)):  # make bandpass filters
+            cf = self.cfs[ii]
+            wk = 2*np.pi*cf / sr
+            wsize = math.ceil(self.qfactor*sr/cf)
+            if zphase and (wsize % 2 == 0):  # force odd-size window for 0phase
+                wsize += 1
+            if zphase:
+                mod = np.exp(1j*wk*np.arange(-(wsize-1)//2, (wsize-1)//2 + 1))
+            else:
+                mod = np.exp(1j*wk*np.arange(wsize))
+            wind = hamming(wsize)
+            self.filts.append(wind/wind.sum() * mod)
+
+    def __len__(self):
+        """Return number of filters."""
+        return self.nchan
+
+    def __getitem__(self, k):
+        """Return k-th channel FIR filter coefficients."""
+        return self.filts[k]
+
+    def freqz(self, k, nfft=None):
+        """Return frequency response of k-th channel filter."""
+        if nfft is None:
+            nfft = max(1024, int(2**np.ceil(np.log2(len(self.filts[k]))))
+                       )  # at least show 1024 frequency points
+        ww = 2*np.pi * np.arange(nfft)/nfft
+        hh = fft(self.filts[k], n=nfft)
+        return ww, hh
+
+    def filter(self, sig, k, fr=None, zphase=True):
+        """Filter signal by k-th filter."""
+        wk = 2*np.pi*self.cfs[k] / self.sr
+        decimate = int(self.sr/fr) if fr else None
+        if decimate:
+            demod = np.exp(-1j*wk*np.arange(0, len(sig), decimate))
+            return convdn(sig, self.filts[k], decimate,
+                          zphase=zphase)[:len(demod)] * demod
+        else:
+            demod = np.exp(-1j*wk*np.arange(len(sig)))
+            return conv(sig, self.filts[k], zphase=zphase)[:len(sig)] * demod
+
+    def cqt(self, sig, fr):
+        """Return the constant Q transform of the signal.
+
+        Parameters
+        ----------
+        sig: array_like
+            Signal to be processed.
+        fr: int
+            Frame rate (or SR / hopsize in seconds) in Hz.
+
+        """
+        decimate = int(self.sr/fr)  # consistent with filter definition
+        out = np.empty((self.nchan, math.ceil(len(sig)/decimate)),
+                       dtype='complex_')
+        for kk in range(self.nchan):
+            out[kk] = self.filter(sig, kk, fr=fr)
+
+        return out.T
