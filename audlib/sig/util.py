@@ -71,6 +71,30 @@ def dither(sig, norm=False, scale=1e-6):
     return sig + np.random.randn(*sig.shape)*scale
 
 
+def clipcenter(sig, threshold):
+    """Center clipping by a threshold."""
+    if threshold == 0:
+        return sig
+    out = np.zeros_like(sig)
+    threshold = np.abs(threshold)
+    maskp = sig > threshold
+    maskn = sig < -threshold
+    out[maskp] = sig[maskp] - threshold
+    out[maskn] = sig[maskn] + threshold
+    return out
+
+
+def clipcenter3lvl(sig, threshold):
+    """Three-level center clipping by a threshold."""
+    out = np.zeros_like(sig)
+    threshold = np.abs(threshold)
+    maskp = sig > threshold
+    maskn = sig < -threshold
+    out[maskp] = 1
+    out[maskn] = -1
+    return out
+
+
 def firfreqz(h, nfft):
     """Compute frequency response of an FIR filter."""
     ww = np.linspace(0, 2, num=nfft, endpoint=False)

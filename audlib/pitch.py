@@ -5,6 +5,7 @@ from scipy.signal import lfilter
 
 from .sig.stproc import numframes, stana
 from .sig.temporal import lpc_parcor, lpcerr, xcorr
+from .sig.util import clipcenter, clipcenter3lvl
 
 ACF_FLOOR = 1e-4
 
@@ -139,8 +140,27 @@ class HistoPitch(object):
 
         self.lowpass = __lowpass
 
-    def t0hist(self, sig, fmin=40, fmax=400):
-        """Compute the fundamental period histogram."""
+    def t0hist(self, sig, fmin=40, fmax=400, clipmode=None, clipratio=0):
+        """Compute the fundamental period histogram.
+
+        Parameters
+        ----------
+        sig: array_like
+            Signal to be analyzed.
+        fmin: float, 40
+            Minimum F0 in Hz.
+        fmax: float, 400
+            Maximum F0 in Hz.
+        clipmode: str, None
+            Optional center clipping before ACF calculation.
+            Available options are:
+            * 'center': Normal center clipping
+            * '3level': 3-level center clipping
+        clipratio: float, 0
+            Center clipping ratio of the maximum absolute amplitude.
+            This parameter is only used when clipmode is not None.
+
+        """
         # Step 0.5: Lowpass filter the signal
         sig = self.lowpass(sig)
 
@@ -149,7 +169,16 @@ class HistoPitch(object):
                  for k in range(len(self.fbank)))
 
         # Step 2: autocorrelation, peak detection, and T0 decision
-        bpacf = (self.stacf(sig) for sig in bpsig)
+        if clipmode is None:
+            bpacf = (self.stacf(sig) for sig in bpsig)
+        elif clipmode == '3level':
+            bpacf = (self.stacf(clipcenter3lvl(
+                sig, clipratio*np.abs(sig).max())) for sig in bpsig)
+        elif clipmode == 'center':
+            bpacf = (self.stacf(clipcenter(
+                sig, clipratio*np.abs(sig).max())) for sig in bpsig)
+        else:
+            raise ValueError(f"Unsupported clipmode: [{clipmode}].")
         lmin = int(self.sr/fmax) if fmax else None
         lmax = math.ceil(self.sr/fmin) if fmin else None
         bpt0 = (self.findt0(acf, lmin=lmin, lmax=lmax,
