@@ -17,7 +17,7 @@ import sys
 import collections
 
 from audlib.asr.util import levenshtein
-from audlib.nn.nn import MLP, AdvancedLSTMCell, AdvancedLSTM, CNN,\
+from audlib.nn.nn import MLP, AdvancedLSTMCell, AdvancedLSTM,\
     PyramidalLSTM
 from audlib.nn.transform import Compose, ToDevice
 
@@ -34,6 +34,31 @@ def to_variable(tensor, cpu=False):
         tensor = tensor.cuda()
     return torch.autograd.Variable(tensor)
 """
+
+
+class CNN(nn.Module):
+    # TODO: Remove hard-coded parameters and generalize parameters.
+    # TODO: Add docstring.
+    def __init__(self, args, input_dim, output_dim):
+        super(CNN, self).__init__()
+        self.layers = nn.ModuleList()
+        self.layers.append(nn.Conv1d(
+            in_channels=input_dim, out_channels=output_dim, padding=1,
+            kernel_size=3, stride=1))
+        self.layers.append(nn.ReLU())
+        self.layers.append(nn.BatchNorm1d(output_dim))
+        self.layers.append(nn.Dropout(0.1))
+        self.layers.append(nn.Conv1d(
+            in_channels=output_dim, out_channels=output_dim, padding=1,
+            kernel_size=3, stride=1))
+        self.layers.append(nn.ReLU())
+        self.layers.append(nn.BatchNorm1d(output_dim))
+        self.layers.append(nn.Dropout(0.1))
+
+    def forward(self, h):
+        for l in self.layers:
+            h = l(h)
+        return h
 
 
 def multipleof8len(x):
@@ -90,8 +115,6 @@ class EncoderModel(nn.Module):
                                       args.encoder_dim, bidirectional=True))
         self.rnns.append(AdvancedLSTM(args.encoder_dim * 2,
                                       args.encoder_dim, bidirectional=True))
-        #self.rnns.append(PyramidalLSTM(args.encoder_dim * 4, args.encoder_dim, bidirectional=True))
-        #self.rnns.append(PyramidalLSTM(args.encoder_dim * 4, args.encoder_dim, bidirectional=True))
         self.rnns.append(PyramidalLSTM(args.encoder_dim * 4,
                                        args.encoder_dim, bidirectional=True))
         self.key_projection = MLP(
@@ -575,10 +598,10 @@ class model_data_optim():
         #    self.net.cuda()
         #    self.criterion.cuda()
 
-    def train_model(self, num_epochs=None):
+    def train(self, nepochs=None):
         start_time = time.time()
-        num_epochs = self.args.epochs if not num_epochs else num_epochs
-        for epoch in range(num_epochs):
+        nepochs = self.args.epochs if not nepochs else nepochs
+        for epoch in range(nepochs):
             self.net.train()
 
             self.adjust_lr(epoch)
@@ -692,9 +715,9 @@ class model_data_optim():
             mean_edit_distance1, mean_edit_distance2, loss_print))
         return loss_print, mean_edit_distance2
 
-    def load_model(self, model_dir):
-        self.net.load_state_dict(torch.load(model_dir + '.pkl'))
-        self.model_param_str = model_dir
+    def load_model(self, modelpath):
+        self.net.load_state_dict(torch.load(modelpath + '.pkl'))
+        self.model_param_str = modelpath
 
     def write_predictions(self):
         self.net.eval()
@@ -751,8 +774,8 @@ class BeamSearchVtlp(nn.Module):
                                                                 keys, values)
         return labels, score, beams
 
-    def load_model(self, model_dir):
-        self.load_state_dict(torch.load(model_dir + '.pkl'))
+    def load_model(self, modelpath):
+        self.load_state_dict(torch.load(modelpath + '.pkl'))
 
     def beamsearch_through_sequence(self, utterance_length, keys, values):
         (key1, key2, key3) = keys
@@ -845,8 +868,8 @@ class BeamSearcher(nn.Module):
                                                                 keys, values)
         return labels, score, beams
 
-    def load_model(self, model_dir):
-        self.load_state_dict(torch.load(model_dir + '.pkl'))
+    def load_model(self, modelpath):
+        self.load_state_dict(torch.load(modelpath + '.pkl'))
 
     def beamsearch_through_sequence(self, utterance_length, keys, values):
         states, mask = self.decoder.get_initial_states(
@@ -954,7 +977,7 @@ def grid_search():
 
         mdo = model_data_optim(train_loader, valid_loader, None,
                                args, init_bias, STRINGS, INPUT_DIM, vocab_size)
-        model_param_str, vlloss = mdo.train_model()
+        model_param_str, vlloss = mdo.train()
         if vlloss < best_validation_loss:
             best_validation_loss = vlloss
             best_params = params
@@ -964,7 +987,7 @@ def grid_search():
         best_params, best_validation_loss))
 
 
-def beamsearch(args, model_dir):
+def beamsearch(args, modelpath):
     # TODO: Add docstring.
     # BUG: Update code with new interface as in main.
     wsj = WSJ()
@@ -993,10 +1016,10 @@ def beamsearch(args, model_dir):
 
     beamsearcher = BeamSearchVtlp(
         args, INPUT_DIM, vocab_size, STRINGS, beam_size=3, eos_index=1)
-    beamsearcher.load_model(model_dir)
+    beamsearcher.load_model(modelpath)
     beamsearcher.eval()
     losses = []
-    with open(model_dir + '.csv', 'w', newline='') as f:
+    with open(modelpath + '.csv', 'w', newline='') as f:
         w = csv.writer(f)
         w.writerow(['Id', 'Predicted'])
         id = 0
@@ -1015,8 +1038,8 @@ def beamsearch(args, model_dir):
             id += 1
 
 
-def main(args, model_dir):
-
+def main(args, modelpath=None):
+    """Training a attention model for speech recognition on WSJ."""
     if args.cuda and torch.cuda.is_available():
         device = torch.device('cuda')
     else:
@@ -1038,7 +1061,7 @@ def main(args, model_dir):
 
     # define and train
     # hack initialization for last layer bias with log unigram probability
-    if model_dir is not None:
+    if modelpath is not None:
         init_bias = None
     else:
         init_bias = VOCAB_HIST / sum(VOCAB_HIST)
@@ -1051,14 +1074,14 @@ def main(args, model_dir):
                            args, init_bias, CHARMAP, FEATDIM, vocab_size)
 
     model_param_str = None
-    if not model_dir:
-        model_param_str, _ = mdo.train_model()
+    if not modelpath:
+        model_param_str, _ = mdo.train()
     else:
         # load model
-        mdo.load_model(model_dir)
+        mdo.load_model(modelpath)
         if args.epochs != 0:
             mdo.eval_model()
-            model_param_str, _ = mdo.train_model()
+            model_param_str, _ = mdo.train()
 
     if model_param_str:  # load best model
         mdo.load_model(model_param_str)
@@ -1096,5 +1119,5 @@ if __name__ == "__main__":
     args = parser.parse_args(sys.argv[1:])
 
     #grid_search()
-    main(args, model_dir=None)
-    #beamsearch(args, model_dir='./vtlp/trloss_1.50_vlloss_837.96_epoch_7_L_17.18_batch_size_16_cuda_False_decoder_dim_1024_encoder_dim_256_enhance_dim_256_init_lr_0.0003_key_dim_1024_linear_dim_1024_net_out_prob_0.30000000000000004_value_dim_1024_weight_decay_1e-06')
+    main(args, modelpath=None)
+    #beamsearch(args, modelpath='./vtlp/trloss_1.50_vlloss_837.96_epoch_7_L_17.18_batch_size_16_cuda_False_decoder_dim_1024_encoder_dim_256_enhance_dim_256_init_lr_0.0003_key_dim_1024_linear_dim_1024_net_out_prob_0.30000000000000004_value_dim_1024_weight_decay_1e-06')
