@@ -23,8 +23,6 @@ pyaudlib focuses on correctness, efficiency, and simplicity. Signal processing f
 
 ## Installation
 
-**OS X & Linux:**
-
 0. Install prerequisite
 ```sh
 pip install pipenv
@@ -37,18 +35,14 @@ pipenv install
 ```sh
 pipenv shell
 ```
-3. cd into `pyaudlib/tools/sph2pipe/` and compile the package
+3. If not using Windows, cd into `pyaudlib/tools/sph2pipe/` and compile the package
 ```sh
 gcc -o sph2pipe *.c -lm
 ```
-4. Add `pyaudlib` path to `PYTHONPATH`.
-5. Verify the installation with unit testing on the `sig` module
+4. Verify the installation with unit testing on the `sig` module
 ```sh
-pytest tests/sig
+python -m pytest tests/sig
 ```
-
-**Windows:**
-TBA.
 
 ## Usage example
 
