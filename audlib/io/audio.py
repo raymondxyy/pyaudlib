@@ -7,9 +7,13 @@ import numpy as np
 import os
 import subprocess
 import io
+import platform
 
 # Global variables used in this module
-_sph2pipe = os.path.dirname(__file__)+'/../../tools/sph2pipe/sph2pipe'
+_sph2pipe = os.path.join(
+    os.path.dirname(__file__),
+    '../../tools/sph2pipe/',
+    'sph2pipe.exe' if platform.system() == 'Windows' else 'sph2pipe')
 
 assert os.path.exists(_sph2pipe)
 
