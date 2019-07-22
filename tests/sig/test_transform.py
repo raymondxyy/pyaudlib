@@ -7,10 +7,10 @@ from audlib.sig.window import hamming
 from audlib.sig.stproc import stana
 
 sig, sr = audioread('samples/welcome16k.wav')
-window_length = 0.032
-hopfrac = 0.25
+window_length = 0.05
+hopfrac = 0.2
 wind = hamming(int(window_length*sr), hop=hopfrac, synth=True)
-nfft = 512
+nfft = 1024
 
 
 def test_stft():

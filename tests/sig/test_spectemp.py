@@ -6,6 +6,7 @@ from audlib.sig.window import hamming
 from audlib.sig.transform import stpowspec
 from audlib.sig.fbanks import Gammatone
 from audlib.sig.spectemp import pncc
+from audlib.enhance import SSFEnhancer
 
 
 def test_strf():

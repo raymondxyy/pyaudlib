@@ -6,6 +6,42 @@ from scipy.fftpack import dct, idct
 from .util import asymfilt
 
 
+def ssf(powerspec, lambda_lp, c0=.01, ptype=2):
+    """Suppression of Slowly-varying components and the Falling edge.
+
+    This implementation follows paper by Kim and Stern:
+    Kim, Chanwoo, and Richard M. Stern."Nonlinear enhancement of onset
+    for robust speech recognition." Eleventh Annual Conference of the
+    International Speech Communication Association. 2010.
+
+    Parameters
+    ----------
+    powerspec: numpy.ndarray
+        Short-time power spectra (potentially frequency-integrated).
+    lambda_lp: float
+        Time constant to be used as the first-order lowpass filter coefficient.
+
+    Keyword Parameters
+    ------------------
+    c0: float, 0.01
+        Power floor constant.
+    ptype: int, 2
+        SSF processing type; either 1 or 2.
+
+    """
+    # Low-pass filtered power
+    mspec = lfilter([1-lambda_lp], [1, -lambda_lp], powerspec, axis=0)
+
+    if ptype == 1:
+        ptilde = np.maximum(powerspec-mspec, c0*powerspec)
+    elif ptype == 2:
+        ptilde = np.maximum(powerspec-mspec, c0*mspec)
+    else:
+        raise ValueError(f"Invalid ptype: [{ptype}]")
+
+    return ptilde / powerspec
+
+
 def pncc(powerspec, medtime=2, medfreq=4, synth=False,
          vad_const=2, lambda_mu=.999, powerlaw=True, cmn=True, ccdim=13,
          tempmask=True, lambda_t=.85, mu_t=.2):

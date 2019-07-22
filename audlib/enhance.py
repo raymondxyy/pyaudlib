@@ -10,10 +10,13 @@
 
 import numpy as np
 from numpy.fft import rfft, irfft
+from scipy.signal import lfilter
 
 from .sig.stproc import stana, ola
+from .sig.fbanks import Gammatone
 from .sig.temporal import lpc_parcor, ref2pred
 from .sig.transform import stft, istft, stpsd
+from .sig.spectemp import ssf
 from .noise import mmse_henriks as npsd_henriks
 from .cfg import cfgload
 
@@ -31,6 +34,73 @@ _asnr_vad = float(_cfg['asnr_vad'])  # VAD threshold
 def __cfgshow__():
     for field in _cfg:
         print("{:>15}: [{}]".format(field, _cfg[field]))
+
+
+class SSFEnhancer(object):
+    """Suppression of Slowly-varying components and the Falling edge.
+
+    This implementation follows paper by Kim and Stern:
+    Kim, Chanwoo, and Richard M. Stern."Nonlinear enhancement of onset
+    for robust speech recognition." Eleventh Annual Conference of the
+    International Speech Communication Association. 2010.
+
+    See Also
+    --------
+    spectemp.ssf
+
+    """
+    def __init__(self, sr, wind, hop, nfft, num_chan=40, c0=.01, ptype=2):
+        """Instantiate an SSF enhancer.
+
+        Parameters
+        ----------
+        sr: int
+            Sampling rate in Hz.
+        wind: numpy.ndarray
+            Window function.
+        hop: float
+            Hop fraction.
+        nfft: int
+            Number of DFT points.
+
+        Keyword Parameters
+        ------------------
+        num_chan: int, 40
+            Number of channels in the Gammatone filterbank.
+        ptype: int, 2
+            SSF type. Default to 2.
+
+        """
+        def _stft(sig):
+            return stft(sig, sr, wind, hop, nfft, synth=True, zphase=True)
+
+        def _istft(spec):
+            return istft(spec, sr, wind, hop, nfft, zphase=True)
+
+        def _ssf(pspec):
+            return ssf(pspec, .4*16000/sr, c0=c0, ptype=ptype)
+
+        self._stft = _stft
+        self._istft = _istft
+        self._ssf = _ssf
+        self.freqwgts = Gammatone(sr, num_chan, (130., 4500.)).gammawgt(
+            nfft, squared=False)
+        wgtpow = np.sqrt((self.freqwgts ** 2).sum(axis=0))
+        self.freqwgts /= (wgtpow / wgtpow[0])
+
+    def __call__(self, sig, pre_emphasis=True):
+        """Enhance a signal with SSF."""
+        if pre_emphasis:
+            sig = lfilter([1, -.97], [1], sig)
+        sigspec = self._stft(sig)
+        wgts = self._ssf((np.abs(sigspec) @ self.freqwgts)**2)
+        mask = (wgts @ self.freqwgts.T) / self.freqwgts.sum(axis=1)
+        sig = self._istft(sigspec*mask)
+        if pre_emphasis:
+            sig = lfilter([1], [1, -.97], sig)
+
+        return sig
+
 
 
 def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):

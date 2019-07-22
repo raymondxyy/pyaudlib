@@ -96,11 +96,12 @@ def istft(sframes, sr, wind, hop, nfft, zphase=False):
 
     """
     def idft(frame):
-        frame = irfft(frame)
+        frame = irfft(frame, n=nfft)
         # from: [... x[-2] x[-1] 0 ... 0 x[0] x[1] ...]
         # to:   [0 ... x[0] x[1] ... x[-1] 0 ...]
         if zphase:
-            frame = np.roll(frame, nfft//2)
+            fsize = len(wind)
+            frame = np.roll(frame, (fsize - (fsize % 2))//2)
         return frame
     return ola(np.asarray([idft(frame) for frame in sframes]), sr, wind, hop)
 
