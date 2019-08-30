@@ -10,30 +10,18 @@ import csv
 import torch.nn as nn
 from torch import optim
 from torch.utils.data import DataLoader
-from sklearn.model_selection import ParameterSampler
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 import torch.nn.functional as F
 import sys
-import collections
 
 from audlib.asr.util import levenshtein
-from audlib.nn.nn import MLP, AdvancedLSTMCell, AdvancedLSTM,\
+from audlib.nn.rnn import MLP, ExtendedLSTMCell, ExtendedLSTM,\
     PyramidalLSTM
 from audlib.nn.transform import Compose, ToDevice
 
-from transforms import my_collate_fn
+from transforms import sort_by_feat_length_collate_fn
 from dataset import FEATDIM, CHARMAP, WSJ_TRAIN, WSJ_VALID, WSJ_TEST,\
     VOCAB_HIST
-
-"""
-def to_variable(tensor, cpu=False):
-    # Tensor -> Variable (on GPU if possible)
-    #print(type(tensor))
-    if torch.cuda.is_available() and not cpu:
-        # Tensor -> GPU Tensor
-        tensor = tensor.cuda()
-    return torch.autograd.Variable(tensor)
-"""
 
 
 class CNN(nn.Module):
@@ -110,10 +98,9 @@ class EncoderModel(nn.Module):
         super(EncoderModel, self).__init__()
         self.cnn = CNN(args, input_dim, args.encoder_dim)
         self.rnns = nn.ModuleList()
-        #self.rnns.append(AdvancedLSTM(input_dim, args.encoder_dim, bidirectional=True))
-        self.rnns.append(AdvancedLSTM(args.encoder_dim,
+        self.rnns.append(ExtendedLSTM(args.encoder_dim,
                                       args.encoder_dim, bidirectional=True))
-        self.rnns.append(AdvancedLSTM(args.encoder_dim * 2,
+        self.rnns.append(ExtendedLSTM(args.encoder_dim * 2,
                                       args.encoder_dim, bidirectional=True))
         self.rnns.append(PyramidalLSTM(args.encoder_dim * 4,
                                        args.encoder_dim, bidirectional=True))
@@ -184,12 +171,12 @@ class DecoderModel(nn.Module):
         self.input_rnns = nn.ModuleList()
         self.value_dim = args.encoder_dim * 2
         #value_dim = args.value_dim
-        self.input_rnns.append(AdvancedLSTMCell(
+        self.input_rnns.append(ExtendedLSTMCell(
             args.decoder_dim + self.value_dim, args.decoder_dim))
-        self.input_rnns.append(AdvancedLSTMCell(
+        self.input_rnns.append(ExtendedLSTMCell(
             args.decoder_dim, args.decoder_dim))
         rnn_out_dim = args.decoder_dim * 2
-        self.input_rnns.append(AdvancedLSTMCell(args.decoder_dim, rnn_out_dim))
+        self.input_rnns.append(ExtendedLSTMCell(args.decoder_dim, rnn_out_dim))
         self.query_projection = MLP(
             rnn_out_dim, args.key_dim, hiddims=[args.linear_dim])
         #self.query_enhance_input = Query_with_enhance_input(args, args.decoder_dim+self.value_dim, args.enhance_dim, rnn_out_dim, args.key_dim)
@@ -447,18 +434,6 @@ def compute_context(keys, query, values, mask):
     context = torch.bmm(alpha, values)
     return context
 
-    '''
-    if query.dim() < 3:
-        query = query.unsqueeze(2)
-    attention_over_sequence = torch.bmm(keys, query)
-    attention_size = attention_over_sequence.size()
-    alpha = F.softmax(attention_over_sequence, 1).view(attention_size[0], 1, attention_size[1]) # (B, 1, u)
-
-    # (B, 1, u) (B, u, D) -> (B, 1, D)\
-    context = torch.bmm(alpha, values)
-    return context
-    '''
-
 
 class Query_with_enhance_input(nn.Module):
     def __init__(self, args, input_dim, enhance_dim, decoder_dim, key_dim):
@@ -516,37 +491,6 @@ def save_args(args):
     with open(os.path.join(args.output_dir, 'args.txt'), 'a') as f:
         for k, v in vars(args).items():
             f.write("{}={}\n".format(k, v))
-
-
-# convert dictionary to namespace
-class Bunch(object):
-    def __init__(self, adict):
-        self.__dict__.update(adict)
-
-
-def get_parameters(param_grid, n_iter=100):
-    param_list = list(ParameterSampler(param_grid, n_iter=n_iter))
-    #param_list = list(ParameterGrid(param_grid))
-    for item in param_list:
-        yield item
-
-
-'''
-def convert_to_string(tokens, unshuffle_idx, vocab):
-    chars = []
-    unshuffled_tokens = unshuffle(tokens, unshuffle_idx)
-    strings = []
-    #tokens = tokens.data.cpu().numpy()
-    for token in unshuffled_tokens:
-        print(token)
-        for x in token:
-            if x == 1:
-                break
-            chars.append(vocab[x])
-        strings.append(''.join(chars))
-        chars.clear()
-    return strings
-'''
 
 
 def convert_to_string(tokens, transmap):
@@ -612,12 +556,8 @@ class model_data_optim():
                 self.optimizer.zero_grad()  # Reset the gradients
 
                 max_label_length = torch.max(label_length)
-                #logits, generateds, greedys = self.net(to_variable(
-                #    sequence), seq_length, to_variable(input), max_label_length)  # weird
                 logits, generateds, greedys = self.net(
                     sequence, seq_length, input, max_label_length)
-                #loss = self.criterion(logits, to_variable(
-                #    output), label_length)  # weird 2
                 loss = self.criterion(logits, output, label_length)  # weird 2
                 loss.backward(retain_graph=True)
                 losses.append(loss.data.cpu().numpy())
@@ -743,301 +683,6 @@ class model_data_optim():
                     w.writerow([id, output_str])
                     id += 1
 
-
-def make_new_beam():
-    def fn(): return -float("inf")
-    return collections.defaultdict(fn)
-
-
-class BeamSearchVtlp(nn.Module):
-    # Tie encoder and decoder together
-    def __init__(self, args, input_dim, vocab_size, STRINGS, beam_size=3, eos_index=1):
-        super(BeamSearchVtlp, self).__init__()
-        self.encoder = EncoderModel(args, input_dim)
-        self.decoder = DecoderModel(args, vocab_size, None)
-        self.STRINGS = STRINGS
-        self.beam_size = beam_size
-        self.eos_index = eos_index
-        self.vocab_size = vocab_size
-        #if torch.cuda.is_available():
-        #    self.cuda()
-
-    def forward(self, utterances, utterance_lengths):
-        utterance1, utterance2, utterance3 = utterances
-        utterance_length1, utterance_length2, utterance_length3 = utterance_lengths
-        key1, value1, seq_lengths = self.encoder(utterance1, utterance_length1)
-        key2, value2, seq_lengths = self.encoder(utterance2, utterance_length2)
-        key3, value3, seq_lengths = self.encoder(utterance3, utterance_length3)
-        keys = (key1, key2, key3)
-        values = (value1, value2, value3)
-        labels, score, beams = self.beamsearch_through_sequence(seq_lengths,
-                                                                keys, values)
-        return labels, score, beams
-
-    def load_model(self, modelpath):
-        self.load_state_dict(torch.load(modelpath + '.pkl'))
-
-    def beamsearch_through_sequence(self, utterance_length, keys, values):
-        (key1, key2, key3) = keys
-        (value1, value2, value3) = values
-        states1, mask = self.decoder.get_initial_states(
-            key1, value1, utterance_length)
-        states2, mask = self.decoder.get_initial_states(
-            key2, value2, utterance_length)
-        states3, mask = self.decoder.get_initial_states(
-            key3, value3, utterance_length)
-        beam = [("", (states1, states2, states3, 0.0, 0))]
-        complete_sequences = []
-
-        T = int(utterance_length)
-
-        for t in range(T):
-            beam, complete_sequences = self.beamsearch_one_step(beam,
-                                                                complete_sequences, t,
-                                                                keys, values, mask)
-
-        # finish up none ending sequences
-        beam = [(x, z / T) for x, (_, _, _, z, _) in beam]
-        beam = beam + complete_sequences
-
-        beam = sorted(beam,
-                      key=lambda x: x[1],
-                      reverse=True)
-        best = beam[0]
-        print(best)
-        return best[0], best[1], beam
-
-    def beamsearch_one_step(self, beam, complete_sequences, t, keys, values, mask):
-        next_beam = make_new_beam()
-        key1, key2, key3 = keys
-        value1, value2, value3 = values
-
-        for prefix, (states1, states2, states3, p_b, prev_output) in beam:  # Loop over beam
-            # use previous output as input
-            pred_char = torch.IntTensor([[prev_output]])
-
-            output1, newstates1 = self.decoder.calculate_prob(states1, t, pred_char,
-                                                              key1, value1, mask)
-            output2, newstates2 = self.decoder.calculate_prob(states2, t, pred_char,
-                                                              key2, value2, mask)
-            output3, newstates3 = self.decoder.calculate_prob(states3, t, pred_char,
-                                                              key3, value3, mask)
-            output = (output1 + output2 + output3) / 3
-            logprobs = F.log_softmax(output, 2).data.cpu().numpy()
-
-            for s_index in range(self.vocab_size):  # loop over vocabulary
-
-                p = logprobs[0, 0, s_index]
-                n_p_b = p_b + p  # included the prob of the last
-
-                if s_index != self.eos_index:
-                    n_prefix = prefix + self.STRINGS[s_index]
-                    # *NB* this would be a good place to include an LM score.
-                    next_beam[n_prefix] = (
-                        newstates1, newstates2, newstates3, n_p_b, s_index)
-                else:
-                    # normalize by length
-                    complete_sequences.append((prefix, n_p_b / (t+1)))
-
-        # Sort and trim the beam before moving on to the
-        # next time-step.
-        beam = sorted(next_beam.items(),
-                      key=lambda x: x[1][-2],
-                      reverse=True)
-        beam = beam[:self.beam_size]
-
-        return beam, complete_sequences
-
-
-class BeamSearcher(nn.Module):
-    # Tie encoder and decoder together
-    def __init__(self, args, input_dim, vocab_size, STRINGS, beam_size=3, eos_index=1):
-        super(BeamSearcher, self).__init__()
-        self.encoder = EncoderModel(args, input_dim)
-        self.decoder = DecoderModel(args, vocab_size, None)
-        self.STRINGS = STRINGS
-        self.beam_size = beam_size
-        self.eos_index = eos_index
-        self.vocab_size = vocab_size
-        #if torch.cuda.is_available():
-        #    self.cuda()
-
-    def forward(self, utterance, utterance_length):
-        keys, values, seq_lengths = self.encoder(utterance, utterance_length)
-        labels, score, beams = self.beamsearch_through_sequence(seq_lengths,
-                                                                keys, values)
-        return labels, score, beams
-
-    def load_model(self, modelpath):
-        self.load_state_dict(torch.load(modelpath + '.pkl'))
-
-    def beamsearch_through_sequence(self, utterance_length, keys, values):
-        states, mask = self.decoder.get_initial_states(
-            keys, values, utterance_length)
-        beam = [("", (states, 0.0, 0))]
-        complete_sequences = []
-
-        T = int(utterance_length)
-
-        for t in range(T):
-            #print("----------decoding time step : {}--------".format(t))
-            beam, complete_sequences = self.beamsearch_one_step(beam,
-                                                                complete_sequences, t,
-                                                                keys, values, mask)
-
-        # finish up none ending sequences
-        beam = [(x, z / T) for x, (y, z, _) in beam]
-        beam = beam + complete_sequences
-
-        beam = sorted(beam,
-                      key=lambda x: x[1],
-                      reverse=True)
-        best = beam[0]
-        return best[0], best[1], beam
-
-    def beamsearch_one_step(self, beam, complete_sequences, t, keys, values, mask):
-        next_beam = make_new_beam()
-
-        for prefix, (states, p_b, prev_output) in beam:  # Loop over beam
-            # use previous output as input
-            pred_char = torch.IntTensor([[prev_output]])
-
-            output, newstates = self.decoder.calculate_prob(states, t, pred_char,
-                                                            keys, values, mask)
-            logprobs = F.log_softmax(output, 2).data.cpu().numpy()
-
-            decoded_char_idx = np.argmax(
-                F.softmax(output, 2).data.cpu().numpy(), 2)[0][0]
-            #print("greedy choice: {}, logprob: {}".format(self.STRINGS[decoded_char_idx], logprobs[0,0,decoded_char_idx]))
-
-            for s_index in range(self.vocab_size):  # loop over vocabulary
-                #print("this guy: {}, logprob: {}".format(self.STRINGS[s_index], logprobs[0,0,s_index]))
-
-                p = logprobs[0, 0, s_index]
-                n_p_b = p_b + p  # included the prob of the last
-
-                if s_index != self.eos_index:
-                    n_prefix = prefix + self.STRINGS[s_index]
-                    # *NB* this would be a good place to include an LM score.
-                    next_beam[n_prefix] = (newstates, n_p_b, s_index)
-                else:
-                    # normalize by length
-                    complete_sequences.append((prefix, n_p_b / (t+1)))
-
-        # Sort and trim the beam before moving on to the
-        # next time-step.
-        beam = sorted(next_beam.items(),
-                      key=lambda x: x[1][1],
-                      reverse=True)
-        beam = beam[:self.beam_size]
-
-        return beam, complete_sequences
-
-
-def grid_search():
-    # TODO: Add docstring.
-    # BUG: Update code with new interface as in main.
-    param_grid = {'encoder_dim': [128, 256, 512], 'batch_size': [32], 'epochs': [5],
-                  'cuda': [True], 'net_out_prob': [0.1], 'weight_decay': [1e-5],
-                  'key_dim': [128, 256, 512], 'value_dim': [128, 256, 512],
-                  'enhance_dim': [256, 512, 1024], 'decoder_dim': [512, 768, 1024],
-                  'init_lr': [1e-3], 'output_dir': ['./input-enhance-output/']}
-    cuda = param_grid['cuda'][0]
-    batch_size = param_grid['batch_size'][0]
-
-    wsj = WSJ()
-    train_data, train_label = wsj.train
-    valid_data, valid_label = wsj.dev
-
-    STRINGS = [
-        x for x in "&*ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz #'-/@_"]
-    INPUT_DIM = 40
-    vocab_size = len(STRINGS)
-    STR_DICT = {}
-    for i, x in enumerate(STRINGS):
-        STR_DICT[x] = i
-
-    kwargs = {'num_workers': 2, 'pin_memory': True} if cuda else {}
-    train_loader = DataLoader(
-        myDataset(wsj.train, STR_DICT), shuffle=True,
-        batch_size=batch_size, collate_fn=my_collate_fn, **kwargs)
-    valid_loader = DataLoader(
-        myDataset(wsj.dev, STR_DICT), shuffle=True,
-        batch_size=batch_size, collate_fn=my_collate_fn, **kwargs)
-
-    # define and train
-    init_bias = None
-
-    # train model
-    best_validation_loss = float('inf')
-    best_params = None
-    for i, params in enumerate(get_parameters(param_grid)):
-        print("model: {}".format(i))
-        args = Bunch(params)
-
-        mdo = model_data_optim(train_loader, valid_loader, None,
-                               args, init_bias, STRINGS, INPUT_DIM, vocab_size)
-        model_param_str, vlloss = mdo.train()
-        if vlloss < best_validation_loss:
-            best_validation_loss = vlloss
-            best_params = params
-            print('best params: {}'.format(best_params))
-
-    print('the best model param is {}, the best validation loss is {}'.format(
-        best_params, best_validation_loss))
-
-
-def beamsearch(args, modelpath):
-    # TODO: Add docstring.
-    # BUG: Update code with new interface as in main.
-    wsj = WSJ()
-
-    STRINGS = [
-        x for x in "&*ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz #'-/@_"]
-    INPUT_DIM = 40
-    vocab_size = len(STRINGS)
-    STR_DICT = {}
-    for i, x in enumerate(STRINGS):
-        STR_DICT[x] = i
-
-    kwargs = {'num_workers': 32, 'pin_memory': True} if args.cuda else {}
-
-    test_loader1 = DataLoader(
-        myDataset(wsj.test1, STR_DICT, True), shuffle=False,
-        batch_size=1, collate_fn=my_collate_fn, **kwargs)
-    test_loader2 = DataLoader(
-        myDataset(wsj.test2, STR_DICT, True), shuffle=False,
-        batch_size=1, collate_fn=my_collate_fn, **kwargs)
-    test_loader3 = DataLoader(
-        myDataset(wsj.test3, STR_DICT, True), shuffle=False,
-        batch_size=1, collate_fn=my_collate_fn, **kwargs)
-
-    init_bias = None
-
-    beamsearcher = BeamSearchVtlp(
-        args, INPUT_DIM, vocab_size, STRINGS, beam_size=3, eos_index=1)
-    beamsearcher.load_model(modelpath)
-    beamsearcher.eval()
-    losses = []
-    with open(modelpath + '.csv', 'w', newline='') as f:
-        w = csv.writer(f)
-        w.writerow(['Id', 'Predicted'])
-        id = 0
-        for loader1, loader2, loader3 in zip(test_loader1, test_loader2, test_loader3):
-            (sequence1, seq_length1, _, _, _) = loader1
-            (sequence2, seq_length2, _, _, _) = loader2
-            (sequence3, seq_length3, _, _, _) = loader3
-
-            #sequences = (to_variable(sequence1), to_variable(
-            #    sequence2), to_variable(sequence3))
-            sequences = (sequence1, sequence2, sequence3)
-            seq_lengths = (seq_length1, seq_length2, seq_length3)
-            labels, score, beams = beamsearcher(
-                sequences, seq_lengths)  # weird
-            w.writerow([id, labels])
-            id += 1
-
-
 def main(args, modelpath=None):
     """Training a attention model for speech recognition on WSJ."""
     if args.cuda and torch.cuda.is_available():
@@ -1047,7 +692,7 @@ def main(args, modelpath=None):
 
     vocab_size = len(CHARMAP)
 
-    collate_fn = Compose([my_collate_fn, ToDevice(device)])
+    collate_fn = Compose([sort_by_feat_length_collate_fn, ToDevice(device)])
     kwargs = {'num_workers': 0, 'pin_memory': True} if args.cuda else {}
     train_loader = DataLoader(WSJ_TRAIN, shuffle=True,
                               batch_size=args.batch_size,

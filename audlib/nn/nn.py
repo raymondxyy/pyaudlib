@@ -124,7 +124,7 @@ class MLP(Module):
             if len(batchnorm) > 0 and batchnorm[ii]:
                 self.layers.append(nn.BatchNorm1d(outdims[ii], momentum=0.05))
             self.layers.append(activate_hid)
-        self.layers.append(nn.Linear(indims[ii+1], outdims[ii+1], bias=bias))
+        self.layers.append(nn.Linear(indims[-1], outdims[-1], bias=bias))
         self.layers.append(activate_out)
 
     def forward(self, x):

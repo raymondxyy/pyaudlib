@@ -1,9 +1,10 @@
 """A collection of recurrent neural networks for processing time series."""
+import numpy as np
 import torch
 from torch.nn import Module
 import torch.nn as nn
 from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
-from torch.nn.utils.rnn import PackedSequence
+from torch.nn.utils.rnn import PackedSequence, pack_sequence
 
 from .nn import MLP
 from .util import detach
@@ -15,30 +16,7 @@ class ExtendedLSTMCell(nn.LSTMCell):
     def __init__(self, *args, **kwargs):
         """Initialize an extended LSTMCell.
 
-        Parameters
-        ----------
-        input_size: The number of expected features in the input `x`
-        hidden_size: The number of features in the hidden state `h`
-        bias: If `False`, then the layer does not use bias weights `b_ih` and
-            `b_hh`. Default: ``True``
-
-        Inputs
-        ------
-        input, (h_0, c_0)
-        input of shape (batch, input_size): tensor containing input features
-        h_0 of shape (batch, hidden_size): tensor containing the initial hidden
-            state for each element in the batch.
-        c_0 of shape (batch, hidden_size): tensor containing the initial cell
-            state for each element in the batch.
-        If (h_0, c_0) is not provided, both h_0 and c_0 default to zero.
-
-        Outputs
-        -------
-        h_1 of shape (batch, hidden_size): tensor containing the next hidden
-            state for each element in the batch.
-        c_1 of shape (batch, hidden_size): tensor containing the next cell
-            state for each element in the batch.
-
+        See the official documentation of LSTMCell.
         """
         super(ExtendedLSTMCell, self).__init__(*args, **kwargs)
         self.h0 = nn.Parameter(torch.FloatTensor(1, self.hidden_size).zero_())
@@ -57,55 +35,7 @@ class ExtendedLSTM(nn.LSTM):
     def __init__(self, *args, **kwargs):
         """Initialize a LSTM.
 
-        Parameters
-        ----------
-        input_size – The number of expected features in the input x
-        hidden_size – The number of features in the hidden state h
-        num_layers – Number of recurrent layers. E.g., setting num_layers=2
-            would mean stacking two LSTMs together to form a stacked LSTM,
-            with the second LSTM taking in outputs of the first LSTM and
-            computing the final results. Default: 1
-        bias – If False, then the layer does not use bias weights b_ih and
-            b_hh. Default: True
-        batch_first – If True, then the input and output tensors are provided
-            as (batch, seq, feature). Default: False
-        dropout – If non-zero, introduces a Dropout layer on the outputs of
-            each LSTM layer except the last layer, with dropout probability
-            equal to dropout. Default: 0
-        bidirectional – If True, becomes a bidirectional LSTM. Default: False
-
-        Inputs
-        ------
-        input, (h_0, c_0)
-        input of shape (seq_len, batch, input_size): tensor containing the
-            features of the input sequence. The input can also be a packed
-            variable length sequence.
-        h_0 of shape (num_layers * num_directions, batch, hidden_size):
-            tensor containing the initial hidden state for each element in the
-            batch. If the RNN is bidirectional, num_directions should be 2,
-            else it should be 1.
-        c_0 of shape (num_layers * num_directions, batch, hidden_size): tensor
-            containing the initial cell state for each element in the batch.
-        If (h_0, c_0) is not provided, both h_0 and c_0 default to zero.
-
-        Outputs
-        -------
-        output, (h_n, c_n)
-        output of shape (seq_len, batch, num_directions * hidden_size): tensor
-            containing the output features (h_t) from the last layer of the
-            LSTM, for each t. If a torch.nn.utils.rnn.PackedSequence has been
-            given as the input, the output will also be a packed sequence.
-        For the unpacked case, the directions can be separated using output.
-            view(seq_len, batch, num_directions, hidden_size), with forward
-            and backward being direction 0 and 1 respectively. Similarly,
-            the directions can be separated in the packed case.
-        h_n of shape (num_layers * num_directions, batch, hidden_size):
-            tensor containing the hidden state for t = seq_len.
-        Like output, the layers can be separated using h_n.view(num_layers,
-            num_directions, batch, hidden_size) and similarly for c_n.
-        c_n (num_layers * num_directions, batch, hidden_size): tensor
-            containing the cell state for t = seq_len
-
+        See the official documentation of LSTM.
         """
         super(ExtendedLSTM, self).__init__(*args, **kwargs)
         bi = 2 if self.bidirectional else 1
@@ -128,6 +58,49 @@ class ExtendedLSTM(nn.LSTM):
                 hx = self.initial_state(
                     len(x) if self.batch_first else x.shape[1])
         return super(ExtendedLSTM, self).forward(x, hx=hx)
+
+
+class ExtendedGRUCell(nn.GRUCell):
+    """Extended GRUCell with learnable initial states."""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize an extended GRUCell.
+
+        See nn.GRUCell for input/output instructions.
+
+        """
+        super(ExtendedGRUCell, self).__init__(*args, **kwargs)
+        self.h0 = nn.Parameter(torch.FloatTensor(1, self.hidden_size).zero_())
+
+    def initial_state(self, n):
+        return self.h0.expand(n, -1).contiguous()
+
+
+class ExtendedGRU(nn.GRU):
+    """Extended GRU with GRU cells that have learnable initial states."""
+
+    def __init__(self, *args, **kwargs):
+        """Initialize an extended GRU.
+
+        See nn.GRU for input/output instructions.
+
+        """
+        super(ExtendedGRU, self).__init__(*args, **kwargs)
+        bi = 2 if self.bidirectional else 1
+        self.h0 = nn.Parameter(torch.FloatTensor(
+            bi, 1, self.hidden_size).zero_())
+
+    def initial_state(self, n):
+        return self.h0.expand(-1, n, -1).contiguous()
+
+    def forward(self, x, hx=None):
+        if hx is None:
+            if isinstance(x, PackedSequence):
+                hx = self.initial_state(x.batch_sizes[0])
+            else:  # tensor
+                hx = self.initial_state(
+                    len(x) if self.batch_first else x.shape[1])
+        return super(ExtendedGRU, self).forward(x, hx=hx)
 
 
 class UnpackedSequence(object):
@@ -153,34 +126,39 @@ class UnpackedSequence(object):
         return ei
 
 
-class SequenceShuffle(nn.Module):
-    """
-    Performs efficient pooling (using indexing) for pyramid LSTM without
-    iteration.
-    """
+class ConcatPool(nn.Module):
+    """Pooling by concatenating consecutive time frames."""
 
-    @staticmethod
-    def concate_sequence(sequence, length):
-        """pyramid LSTM, merge consecutive time step together"""
-        shape = sequence.size()
+    def __init__(self, decimate):
+        """Instantiate a pooling layer with decimation."""
+        super(ConcatPool, self).__init__()
+        assert decimate > 1, "Invalid decimation factor."
+        self.decimate = int(decimate)
 
-        # efficient using indexing, don't need iteration
-        input_range = sequence.data.new(shape[0] // 2).zero_().long()
-        torch.arange(1, int(shape[0]), 2, out=input_range)
-        input_concate = torch.cat(
-            (sequence[input_range - 1], sequence[input_range]), 2)
+    def concatdn(self, seq, padvalue):
+        """Decimate a PackedSequence by conocatenating consecutive frames."""
+        oldframes = seq.size(0)
+        newframes = (oldframes+self.decimate-1) // self.decimate
+        padlen = newframes*self.decimate
+        # NOTE: only supporting 2-D sequence for now
+        padseq = seq.data.new(padlen, seq.size(1))
+        padseq[:oldframes, :] = seq
+        padseq[oldframes:] = padvalue
+        # get ending index for each frame after concatenation
+        rng = seq.data.new(newframes).long()
+        torch.arange(self.decimate-1, padlen, self.decimate, out=rng)
+        catseq = torch.cat(
+            [padseq[rng-ii] for ii in range(self.decimate-1, -1, -1)], 1)
 
-        length = np.array(length) // 2
+        return catseq
 
-        return input_concate, length
+    def forward(self, packedseq, padvalue=0.):
+        assert isinstance(packedseq, PackedSequence)
+        out = []
+        for seq in UnpackedSequence(packedseq):
+            out.append(self.concatdn(seq, padvalue))
 
-    def forward(self, seq):
-        assert isinstance(seq, PackedSequence)
-        h, seq_lengths = pad_packed_sequence(seq)
-        h, seq_lengths = self.concate_sequence(h, seq_lengths)
-        h = pack_padded_sequence(h, seq_lengths)
-        return h
-
+        return pack_sequence(out)
 
 class PyramidalLSTM(ExtendedLSTM):
     """Pyramidal LSTM could reduce the sequence length by half."""
@@ -188,10 +166,10 @@ class PyramidalLSTM(ExtendedLSTM):
     def __init__(self, *args, **kwargs):
         """See ExtendedLSTM."""
         super(PyramidalLSTM, self).__init__(*args, **kwargs)
-        self.shuffle = SequenceShuffle()
+        self.shuffle = ConcatPool(2)
 
-    def forward(self, input, hx=None):
-        return super(PyramidalLSTM, self).forward(self.shuffle(input), hx=hx)
+    def forward(self, x, hx=None):
+        return super(PyramidalLSTM, self).forward(self.shuffle(x), hx=hx)
 
 
 class WeightdropLSTM(nn.LSTM):

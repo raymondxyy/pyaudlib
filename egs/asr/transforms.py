@@ -6,13 +6,13 @@ recognition using `audlib`.
 
 import numpy as np
 from scipy.signal import lfilter
-from scipy.fftpack import idct
+from scipy.fftpack import dct, idct
 import torch
 from torch.utils.data.dataloader import _use_shared_memory
 
 from audlib.sig.window import hamming
 from audlib.sig.fbanks import MelFreq
-from audlib.sig.stproc import stana, numframes
+from audlib.sig.transform import stpowspec
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
@@ -23,48 +23,50 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 class Melspec(object):
     """Compute MFCC of speech samples drawn from Dataset."""
 
-    def __init__(self, sampling_rate, window_length=.0256, frame_rate=100,
-                 nfft=512, nmel=40):
+    def __init__(self, srate, wlen=.0256, frate=100, nfft=512, nmel=40):
         """Initialize Mel filterbanks."""
         super(Melspec, self).__init__()
-        self.sr = sampling_rate
-        self.hopsize = int(sampling_rate/frame_rate)
-        self.wind = hamming(int(window_length*sampling_rate), hop=self.hopsize)
-        self.melbank = MelFreq(sampling_rate, nfft, nmel, unity=True)
+        self.sr = srate
+        self.melbank = MelFreq(srate, nfft, nmel, unity=True)
         self.nmel = nmel
+
+        hop = int(srate/frate)
+        wind = hamming(int(wlen*srate), hop=hop)
+
+        def _melspec(sig):
+            """Compute melspec after cepstral-mean-norm."""
+            pspec = stpowspec(sig, srate, wind, hop, nfft)
+            melspec = pspec @ self.melbank.wgts
+            smallpower = melspec < 10**(-8)  # -80dB power floor
+            melspec[~smallpower] = np.log(melspec[~smallpower])
+            melspec[smallpower] = np.log(10**(-8))
+            mfcc = dct(melspec, norm='ortho')
+            melspec = idct(mfcc-mfcc.mean(axis=0), norm='ortho')
+            return melspec
+
+        self._melspec = _melspec
 
     def __call__(self, sample):
         """Extract MFCCs of signals in sample.
 
-        Assume sample = {'data': signal,
-                         'label': label sequence
-                         }
+        Assume sample is a SpeechTranscript class with the following fields:
+            signal - signal samples
+            samplerate - sampling rate in Hz
+            label - integer list of labels
+            transcript - actual transcript as a string
         """
-        sig = sample['data']
-        label = sample['label']
+        assert self.sr == sample.samplerate, "Incompatible sampling rate."
+        sig = sample.signal
 
         # pre-emphasis
         sig = lfilter([1, -0.97], [1], sig)
 
         # No dithering
 
-        # extract MFCCs
-        nframe = numframes(sig, self.sr, self.wind,
-                           self.hopsize, trange=(0, None))
-        mfcc = np.zeros((nframe, self.nmel))
-        for ii, frame in enumerate(stana(sig, self.sr, self.wind, self.hopsize,
-                                         trange=(0, None))):
-            mfcc[ii] = self.melbank.mfcc(frame)
+        # Compute melspec
+        sample.signal = self._melspec(sig)
 
-        # cepstral mean normalization
-        mfcc -= mfcc.mean(axis=0)
-
-        # inverse transform to mel spectral domain
-        melspec = idct(mfcc, norm='ortho')
-
-        out = {'data': melspec, 'label': label}
-
-        return out
+        return sample
 
 
 class FinalTransform(object):
@@ -89,11 +91,13 @@ class FinalTransform(object):
         # TODO: Explain what each output is; consider changing interface.
         """Transform one data sample to its final form before collating.
 
-        Assume sample = {'data': feature in ndarray,
-                         'label': label sequence in list of int
-                         }
+        Assume sample is a SpeechTranscript class with the following fields:
+            signal - (transformed) signal samples
+            samplerate - sampling rate in Hz
+            label - integer list of labels
+            transcript - actual transcript as a string
         """
-        feat, label = sample['data'], sample['label']
+        feat, label = sample.signal, sample.label
         if self.train:
             input = self.append_token(label)
             output = self.append_token(label, input=False)

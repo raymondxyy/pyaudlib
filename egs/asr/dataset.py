@@ -180,3 +180,8 @@ print("Accumulating vocabulary histogram.")
 VOCAB_HIST = np.asarray(_wsj_train.vocab_hist)
 for ii, cnt in enumerate(VOCAB_HIST):
     print("""{}: {}""".format(_wsj_train.transmap.labeldict[ii], cnt))
+
+
+if __name__ == "__main__":
+    for ii, sample in enumerate(WSJ_TRAIN):
+        print(sample.signal.shape)
