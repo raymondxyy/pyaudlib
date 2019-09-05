@@ -10,7 +10,7 @@ import numpy as np
 from audlib.asr.util import CharacterMap
 from audlib.data.wsj import ASRWSJ0, WSJ0
 from audlib.data.dataset import Subset
-from audlib.nn.transform import Compose, ToTensor
+from audlib.nn.transform import Compose
 
 from transforms import Melspec, FinalTransform
 
@@ -151,11 +151,9 @@ _signal_transform = Melspec(16000, nmel=FEATDIM)
 CHARMAP = CharacterMap(CHARS, replacemap=REPLMAP)
 print(CHARMAP)
 _train_transforms = Compose([_signal_transform,
-                             FinalTransform(CHARMAP, train=True),
-                             ToTensor('float_')])
+                             FinalTransform(CHARMAP, '&', '*', train=True)])
 _test_transforms = Compose([_signal_transform,
-                            FinalTransform(CHARMAP, train=False),
-                            ToTensor('float_')])
+                            FinalTransform(CHARMAP, '&', '*', train=False)])
 
 
 def _filt(path): return path.endswith(".wv1")  # only process .wv1
@@ -183,5 +181,5 @@ for ii, cnt in enumerate(VOCAB_HIST):
 
 
 if __name__ == "__main__":
-    for ii, sample in enumerate(WSJ_TRAIN):
-        print(sample.signal.shape)
+    for ii, (feat, inseq, target) in enumerate(WSJ_TRAIN):
+        print(feat.shape)
