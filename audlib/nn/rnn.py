@@ -108,14 +108,16 @@ class UnpackedSequence(object):
     def __init__(self, ps):
         """Construct an unpacked sequence object."""
         self.packed_sequence = ps
-        lencnt = [int(n) for n in ps.batch_sizes[:-1]-ps.batch_sizes[1:]] + [1]
+        lencnt = [int(n) for n in ps.batch_sizes[:-1]-ps.batch_sizes[1:]] \
+            + [int(ps.batch_sizes[-1])]
         self.seqlengths = []  # seqlengths[i] contains length of example i
         for num, ll in zip(lencnt[::-1], range(len(lencnt), 0, -1)):
             self.seqlengths.extend([ll] * num)
+        assert len(self.seqlengths) == self.packed_sequence.batch_sizes[0]
 
     def __len__(self):
         """Return number of examples in this batch."""
-        return self.packed_sequence.batch_sizes[0]
+        return len(self.seqlengths)
 
     def __getitem__(self, i):
         """Get original idx-th item in the batch."""
@@ -163,10 +165,10 @@ class ConcatPool(nn.Module):
 class PyramidalLSTM(ExtendedLSTM):
     """Pyramidal LSTM could reduce the sequence length by half."""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, decimate=2, **kwargs):
         """See ExtendedLSTM."""
         super(PyramidalLSTM, self).__init__(*args, **kwargs)
-        self.shuffle = ConcatPool(2)
+        self.shuffle = ConcatPool(decimate)
 
     def forward(self, x, hx=None):
         return super(PyramidalLSTM, self).forward(self.shuffle(x), hx=hx)
