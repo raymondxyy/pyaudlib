@@ -82,15 +82,20 @@ def main(args):
             targets = targets.to(device)
 
             # Forward pass
-            probtru = .5 * np.exp(-ii / (len(trainld)//5))
+            probtru = 1  #.5 * np.exp(-ii / (len(trainld)//5))
             outseqs = model(feats, inseqs, probtru=probtru)
 
             # Caculate error
             xerr = 0
             for oo, tt in zip(outseqs, UnpackedSequence(targets)):
                 # Ignore fake target nodes
+                print("[PRED]: ", end='')
+                ooidx = oo[:len(tt)].argmax(dim=1)
+                print(''.join(CHARMAP.labeldict[int(ii)] for ii in ooidx))
+                print("[TARG]: ", end='')
+                print(''.join(CHARMAP.labeldict[int(ii)] for ii in tt))
                 xerr += criterion(oo[:len(tt)], tt)
-            xerr /= len(targets)
+            xerr /= len(inseqs)
             cost = xerr
 
             # Calculate gradients and update network weights
