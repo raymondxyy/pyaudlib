@@ -1,6 +1,5 @@
 """Utility Functions and Neural Networks."""
 import numpy as np
-import os
 import torch
 import torch.nn.functional as F
 
@@ -20,6 +19,7 @@ def printnn(model):
     for name, param in model.named_parameters():
         if param.requires_grad:
             print("{}[{}]\n{}".format('-' * 30, name, param.data.numpy()))
+
 
 class UnpackedSequence(object):
     """Unpack a PackedSequence to original (unpadded) examples."""
