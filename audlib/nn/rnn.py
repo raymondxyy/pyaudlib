@@ -1,13 +1,11 @@
 """A collection of recurrent neural networks for processing time series."""
-import numpy as np
 import torch
 from torch.nn import Module
 import torch.nn as nn
-from torch.nn.utils.rnn import pad_packed_sequence, pack_padded_sequence
 from torch.nn.utils.rnn import PackedSequence, pack_sequence
 
 from .nn import MLP
-from .util import detach
+from .util import detach, UnpackedSequence
 
 
 class ExtendedLSTMCell(nn.LSTMCell):
@@ -103,31 +101,6 @@ class ExtendedGRU(nn.GRU):
         return super(ExtendedGRU, self).forward(x, hx=hx)
 
 
-class UnpackedSequence(object):
-    """Unpack a PackedSequence to original (unpadded) examples."""
-    def __init__(self, ps):
-        """Construct an unpacked sequence object."""
-        self.packed_sequence = ps
-        lencnt = [int(n) for n in ps.batch_sizes[:-1]-ps.batch_sizes[1:]] \
-            + [int(ps.batch_sizes[-1])]
-        self.seqlengths = []  # seqlengths[i] contains length of example i
-        for num, ll in zip(lencnt[::-1], range(len(lencnt), 0, -1)):
-            self.seqlengths.extend([ll] * num)
-        assert len(self.seqlengths) == self.packed_sequence.batch_sizes[0]
-
-    def __len__(self):
-        """Return number of examples in this batch."""
-        return len(self.seqlengths)
-
-    def __getitem__(self, i):
-        """Get original idx-th item in the batch."""
-        idx = torch.LongTensor(self.seqlengths[i])
-        idx[0] = i
-        idx[1:] = self.packed_sequence.batch_sizes[:self.seqlengths[i]-1]
-        ei = self.packed_sequence.data[idx.cumsum(0)]  # example i
-        return ei
-
-
 class ConcatPool(nn.Module):
     """Pooling by concatenating consecutive time frames."""
 
@@ -161,6 +134,7 @@ class ConcatPool(nn.Module):
             out.append(self.concatdn(seq, padvalue))
 
         return pack_sequence(out)
+
 
 class PyramidalLSTM(ExtendedLSTM):
     """Pyramidal LSTM could reduce the sequence length by half."""

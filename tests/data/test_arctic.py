@@ -1,9 +1,9 @@
 """Test the ARCTIC dataset."""
-from audlib.data.arctic import ARCTIC1
+from audlib.data.arctic import ARCTIC
 
 
 def test_arctic():
-    arctic = ARCTIC1('/home/xyy/data/ARCTIC', egg=True)
+    arctic = ARCTIC('/home/xyy/data/ARCTIC', egg=True)
     print(arctic)
     for ii, elem in enumerate(arctic):
         pass

@@ -9,7 +9,7 @@ from torch import optim
 from torch.utils.data import DataLoader
 from torch.nn.utils.rnn import pack_sequence
 
-from audlib.nn.rnn import UnpackedSequence
+from audlib.nn.util import UnpackedSequence
 
 from dataset import FEATDIM, CHARMAP, WSJ_TRAIN, WSJ_VALID, WSJ_TEST
 from models import ListenAttendSpell

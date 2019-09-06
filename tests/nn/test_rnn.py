@@ -2,7 +2,8 @@
 import torch
 from torch.nn.utils.rnn import pack_sequence
 
-from audlib.nn.rnn import ARMA, ExtendedLSTM, UnpackedSequence
+from audlib.nn.rnn import ARMA, ExtendedLSTM
+from audlib.nn.util import UnpackedSequence
 
 #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 device = torch.device('cpu')

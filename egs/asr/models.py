@@ -5,7 +5,8 @@ from torch.nn.utils.rnn import PackedSequence
 from torch.nn.utils.rnn import pack_sequence
 import torch.nn.functional as F
 
-from audlib.nn.rnn import MLP, ExtendedLSTM, PyramidalLSTM, UnpackedSequence
+from audlib.nn.rnn import MLP, ExtendedLSTM, PyramidalLSTM
+from audlib.nn.util import UnpackedSequence
 
 
 class ListenAttendSpell(nn.Module):
