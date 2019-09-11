@@ -95,14 +95,17 @@ def istft(sframes, sr, wind, hop, nfft, zphase=False):
     stproc.ola
 
     """
-    def idft(frame):
-        frame = irfft(frame)
+    frames = irfft(sframes, n=nfft)
+    if zphase:
         # from: [... x[-2] x[-1] 0 ... 0 x[0] x[1] ...]
-        # to:   [0 ... x[0] x[1] ... x[-1] 0 ...]
-        if zphase:
-            frame = np.roll(frame, nfft//2)
-        return frame
-    return ola(np.asarray([idft(frame) for frame in sframes]), sr, wind, hop)
+        # to:   [x[0] x[1] ... x[-1] 0 ...]
+        fsize = len(wind)
+        woff = (fsize-(fsize % 2)) // 2
+        frames = np.concatenate((frames[:, (nfft-woff):],
+                                 frames[:, :(fsize-woff)]), axis=1)
+    else:
+        frames = frames[:, :len(wind)]
+    return ola(frames, sr, wind, hop)
 
 
 def stacf(sig, sr, wind, hop, norm=True, biased=True):

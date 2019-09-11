@@ -3,22 +3,22 @@ import numpy as np
 from audlib.sig.transform import stft, istft, realcep, compcep
 from audlib.io.audio import audioread
 from audlib.sig.window import hamming
-
 from audlib.sig.stproc import stana
+from audlib.sig.util import nextpow2
 
-sig, sr = audioread('samples/welcome16k.wav')
-window_length = 0.032
-hopfrac = 0.25
-wind = hamming(int(window_length*sr), hop=hopfrac, synth=True)
-nfft = 512
+WELCOME, SR = audioread('samples/welcome16k.wav')
 
 
 def test_stft():
     """Test STFT and iSTFT."""
-    sig_stft = stft(sig, sr, wind, hopfrac, nfft, synth=True, zphase=True)
-    sigsynth = istft(sig_stft, sr, wind, hopfrac, nfft, zphase=True)
-
-    assert np.allclose(sig, sigsynth[:len(sig)])
+    for zp in (True, False):
+        for wlen in (0.02, 0.025, 0.032, 0.5):
+            for hop in (0.25, 0.5):
+                wind = hamming(int(wlen*SR), hop=hop, synth=True)
+                nfft = nextpow2(len(wind))
+                spec = stft(WELCOME, SR, wind, hop, nfft, synth=True, zphase=zp)
+                sigsynth = istft(spec, SR, wind, hop, nfft, zphase=zp)
+                assert np.allclose(WELCOME, sigsynth[:len(WELCOME)])
 
 
 def test_cep():
@@ -57,7 +57,10 @@ def test_cep():
 
 def test_rcep():
     ncep = 500
-    for frame in stana(sig[int(.652*sr):], sr, wind, hopfrac):
+    window_length = 0.02
+    hopfrac = 0.5
+    wind = hamming(int(window_length*SR), hop=hopfrac, synth=True)
+    for frame in stana(WELCOME[int(.652*SR):], SR, wind, hopfrac):
         cep1 = realcep(frame, ncep)  # log-magnitude method
         cep2 = realcep(frame, ncep, comp=True, ztrans=True)  # ZT method
         cep3 = realcep(frame, ncep, comp=True)  # complex log method
