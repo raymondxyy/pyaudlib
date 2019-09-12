@@ -111,9 +111,6 @@ class MLP(Module):
         self.outdim = outdim
         self.hiddims = hiddims
         self.nhidden = len(hiddims)
-        self.bias = bias
-        self.activate_hid = activate_hid
-        self.activate_out = activate_out
         if self.nhidden == 0:
             print("No hidden layers.")
         indims = [indim] + hiddims
@@ -125,7 +122,8 @@ class MLP(Module):
                 self.layers.append(nn.BatchNorm1d(outdims[ii], momentum=0.05))
             self.layers.append(activate_hid)
         self.layers.append(nn.Linear(indims[-1], outdims[-1], bias=bias))
-        self.layers.append(activate_out)
+        if activate_out is not None:
+            self.layers.append(activate_out)
 
     def forward(self, x):
         """One forward pass."""
