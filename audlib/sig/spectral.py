@@ -32,20 +32,23 @@ def logmagphase(cspectrum, unwrap=False, floor=-10.):
     return logmag(mag, floor=floor), phs
 
 
-def logmag(sig, floor=-10.):
+def logmag(sig, floor=-80.):
     """Compute log magnitude of complex spectrum.
 
-    Floor any -`np.inf` value to `floor` plus log minimum. If all values are
-    0s, floor all values to floor*5.
+    Parameters
+    ----------
+    sig: numpy.ndarray
+        Complex spectra.
+    floor: float, -80.
+        Magnitude floor in dB.
+
     """
     mag = np.abs(sig)
     zeros = mag == 0
-    logm = np.empty_like(mag)
-    logm[~zeros] = np.log(mag[~zeros])
-    logmin = np.log(mag[~zeros].min()) if np.any(~zeros) else floor*5
-    logm[zeros] = floor + logmin
+    mag[zeros] = np.log(10**(floor / 20))
+    mag[~zeros] = np.log(mag[~zeros])
 
-    return logm
+    return mag
 
 
 def phasor(mag, phase):
