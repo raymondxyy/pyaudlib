@@ -129,12 +129,14 @@ def stana(sig, sr, wind, hop, synth=False, center=False):
     zpleft = -sstart
     zpright = (nframe-1)*hsize+fsize - zpleft - ssize
     if zpleft > 0 or zpright > 0:
-        sigpad = np.zeros(ssize+zpleft+zpright)
+        sigpad = np.empty(ssize+zpleft+zpright, dtype=sig.dtype)
+        sigpad[:zpleft] = 0
         sigpad[zpleft:len(sigpad)-zpright] = sig
+        sigpad[len(sigpad)-zpright:] = 0
     else:
         sigpad = sig
 
-    std = sig.strides[0]
+    std = sigpad.strides[0]
     return as_strided(sigpad, shape=(nframe, fsize),
                       strides=(std*hsize, std)) * wind
 
