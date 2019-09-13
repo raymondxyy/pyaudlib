@@ -38,9 +38,9 @@ class ExtendedLSTM(nn.LSTM):
         super(ExtendedLSTM, self).__init__(*args, **kwargs)
         bi = 2 if self.bidirectional else 1
         self.h0 = nn.Parameter(torch.FloatTensor(
-            bi, 1, self.hidden_size).zero_())
+            self.num_layers*bi, 1, self.hidden_size).zero_())
         self.c0 = nn.Parameter(torch.FloatTensor(
-            bi, 1, self.hidden_size).zero_())
+            self.num_layers*bi, 1, self.hidden_size).zero_())
 
     def initial_state(self, n):
         return (
@@ -86,7 +86,7 @@ class ExtendedGRU(nn.GRU):
         super(ExtendedGRU, self).__init__(*args, **kwargs)
         bi = 2 if self.bidirectional else 1
         self.h0 = nn.Parameter(torch.FloatTensor(
-            bi, 1, self.hidden_size).zero_())
+            self.num_layers*bi, 1, self.hidden_size).zero_())
 
     def initial_state(self, n):
         return self.h0.expand(-1, n, -1).contiguous()
