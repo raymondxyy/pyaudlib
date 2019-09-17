@@ -95,13 +95,13 @@ def stana(sig, sr, wind, hop, synth=False, center=False):
         Window function used for framing. See `window` for window functions.
     hop: float or int
         Hop fraction in (0, 1) or hop size in integers.
-    synth: bool, optional
+    synth: bool, False
         Whether time-domain synthesis is the end goal.
-        Default to false.
-    center: bool, optional
+        This option has higher priority than `center` if enabled.
+    center: bool, False
         Shift the windowed signal by half a window length if true. This is
         useful for applications like speech activity detection.
-        Default to false.
+        When enabled, this option is only applied when `synth` is False.
 
     Returns
     -------

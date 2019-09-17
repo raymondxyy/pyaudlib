@@ -21,7 +21,7 @@ from .temporal import xcorr
 from .auditory import hz2mel, dft2mel
 
 
-def stft(sig, sr, wind, hop, nfft, synth=False, zphase=False):
+def stft(sig, sr, wind, hop, nfft, center=True, synth=False, zphase=False):
     """Short-time Fourier Transform.
 
     Implement STFT with the Fourier transform view. See `stana` for meanings
@@ -54,7 +54,7 @@ def stft(sig, sr, wind, hop, nfft, synth=False, zphase=False):
     stproc.stana
 
     """
-    frames = stana(sig, sr, wind, hop, synth=synth)
+    frames = stana(sig, sr, wind, hop, synth=synth, center=center)
     if zphase:
         fsize = len(wind)
         woff = (fsize-(fsize % 2)) // 2
