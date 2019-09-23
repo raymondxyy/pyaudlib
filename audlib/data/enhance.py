@@ -19,7 +19,7 @@ class RandSample(AudioDataset):
     def isaudio(path):
         return path.endswith(('.wav', '.flac', '.sph'))
 
-    def __init__(self, root, minlen=None, maxlen=None, unit='second',
+    def __init__(self, root, minlen=0., maxlen=None, unit='second',
                  filt=None, transform=None, cache=False):
         """Instantiate a random sampling dataset.
 
@@ -57,9 +57,9 @@ class RandSample(AudioDataset):
 
         def _filt(path):
             """Filter based on audio lengths."""
-            if filt:
-                return filt(path) and no_shorter_than(path, minlen, unit)
-            return self.isaudio(path) and no_shorter_than(path, minlen, unit)
+            blen = no_shorter_than(path, minlen, unit)
+            bcus = True if not filt else filt(path)
+            return self.isaudio(path) and blen and bcus
 
         super(RandSample, self).__init__(root, filt=_filt)
 
