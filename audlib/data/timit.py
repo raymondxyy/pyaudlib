@@ -287,17 +287,32 @@ def utt_no_shorter_than(path, duration, unit='second'):
 
 
 # Some transform functions
+def rmsilence(sample):
+    """Remove silence from the waveform of a sample."""
+    ns, ne = sample.wordseq[0][0][0], sample.wordseq[-1][0][1]
+    return sample.signal[ns:ne]
+
+
 def randselwave(sample, minlen=0, maxlen=None, nosilence=True):
     """Randomly select a portion of the signal from a sample."""
     if nosilence:
-        sigsize = sample.wordseq[-1][0][1] - sample.wordseq[0][0][0]
+        sig = rmsilence(sample)
     else:
-        sigsize = len(sample.signal)
-    minoffset = min(int(minlen*sample.samplerate), sigsize)
-    maxoffset = int(maxlen*sample.samplerate) if maxlen else sigsize
-    tstart = randrange(max(1, sigsize-minoffset))
-    tend = randrange(tstart+minoffset, min(tstart+maxoffset, sigsize+1))
-    return sample.signal[tstart:tend]
+        sig = sample.signal
+
+    sigsize = len(sig)
+    minoffset = int(minlen * sample.samplerate)
+    maxoffset = min(int(maxlen*sample.samplerate),
+                    sigsize) if maxlen else sigsize
+
+    assert (minoffset < maxoffset) and (minoffset <= sigsize), \
+        f"""BAD: siglen={sigsize}, minlen={minoffset}, maxlen={maxoffset}"""
+
+    # Select begin sample
+    ns = randrange(max(1, sigsize-minoffset))
+    ne = randrange(ns+minoffset, min(ns+maxoffset, sigsize+1))
+
+    return sig[ns:ne]
 
 
 def randselphon(sample, phonfunc=None):
