@@ -1,4 +1,5 @@
 """Frame-level frequency-domain processing."""
+import math
 
 import numpy as np
 from numpy.fft import rfft, irfft
@@ -33,7 +34,7 @@ def logmagphase(cspectrum, unwrap=False, floor=-10.):
 
 
 def logmag(sig, floor=-80.):
-    """Compute log magnitude of complex spectrum.
+    """Compute natural log magnitude of complex spectrum.
 
     Parameters
     ----------
@@ -43,12 +44,33 @@ def logmag(sig, floor=-80.):
         Magnitude floor in dB.
 
     """
-    mag = np.abs(sig)
-    zeros = mag == 0
-    mag[zeros] = np.log(10**(floor / 20))
-    mag[~zeros] = np.log(mag[~zeros])
+    eps = 10**(floor/20)
+    sigmag = np.abs(sig)
+    smallmag = sigmag < eps
+    sigmag[smallmag] = np.log(eps)
+    sigmag[~smallmag] = np.log(sigmag[~smallmag])
 
-    return mag
+    return sigmag
+
+
+def logpow(sig, floor=-80.):
+    """Compute natural log power of complex spectrum.
+
+    Parameters
+    ----------
+    sig: numpy.ndarray
+        Complex spectra.
+    floor: float, -80.
+        Magnitude floor in dB.
+
+    """
+    eps = 10**(floor/10)
+    sigpow = sig.real**2 + sig.imag**2
+    smallpower = sigpow < eps
+    sigpow[smallpower] = np.log(eps)
+    sigpow[~smallpower] = np.log(sigpow[~smallpower])
+
+    return sigpow
 
 
 def phasor(mag, phase):
@@ -297,3 +319,100 @@ def compcep(frame, n, nfft=4096, floor=-10., ztrans=False):
         cep = irfft(lmag+1j*phase, n=nfft)[:2*n+1]
         cep = np.roll(cep, n)
     return cep
+
+
+def mvnorm1(powspec, frameshift, tau=3., tau_init=.1, t_init=.2):
+    """Online mean and variance normalization of a short-time power spectra.
+
+    This function computes online mean/variance as a scalar instead of a vector
+    in `mvnorm`.
+
+    Parameters
+    ----------
+    powspec: numpy.ndarray
+        Real-valued short-time power spectra with dimension (T,F).
+    frameshift: float
+        Number of seconds between adjacent frame centers.
+
+    Keyword Parameters
+    ------------------
+    tau: float, 3.
+        Time constant of the median-time recursive averaging function.
+    tau_init: float, .1
+        Initial time constant for fast adaptation.
+    t_init: float, .2
+        Amount of time in seconds from the beginning during which `tau_init` is applied.
+        The rest of time will use `tau`.
+
+    Returns
+    -------
+    powspec_norm: numpy.ndarray
+        Normalized short-time power spectra with dimension (T,F).
+
+    """
+    alpha = np.exp(-frameshift / tau)
+    alpha0 = np.exp(-frameshift / tau_init)  # fast adaptation
+    init_frames = math.ceil(t_init / frameshift)
+    assert init_frames < len(powspec)
+
+    mu = np.empty(len(powspec))
+    var = np.empty(len(powspec))
+    # Start with global mean and variance
+    mu[0] = alpha0 * powspec.mean() + (1-alpha0)*powspec[0].mean()
+    var[0] = alpha0 * (powspec**2).mean() + (1-alpha0)*(powspec[0]**2).mean()
+    for ii in range(1, init_frames):
+        mu[ii] = alpha0*mu[ii-1] + (1-alpha0)*powspec[ii].mean()
+        var[ii] = alpha0*var[ii-1] + (1-alpha0)*(powspec[ii]**2).mean()
+    for ii in range(init_frames, len(powspec)):
+        mu[ii] = alpha*mu[ii-1] + (1-alpha)*powspec[ii].mean()
+        var[ii] = alpha*var[ii-1] + (1-alpha)*(powspec[ii]**2).mean()
+
+    return (powspec - mu[:, np.newaxis]) / np.maximum(
+        np.sqrt(np.maximum(var[:, np.newaxis]-mu[:, np.newaxis]**2, 0)), 1e-12)
+
+
+def mvnorm(powspec, frameshift, tau=3., tau_init=.1, t_init=.2):
+    """Online mean and variance normalization of a short-time power spectra.
+
+    Parameters
+    ----------
+    powspec: numpy.ndarray
+        Real-valued short-time power spectra with dimension (T,F).
+    frameshift: float
+        Number of seconds between adjacent frames.
+
+    Keyword Parameters
+    ------------------
+    tau: float, 3.
+        Time constant of the median-time recursive averaging function.
+    tau_init: float, .1
+        Initial time constant for fast adaptation.
+    t_init: float, .2
+        Amount of time in seconds from the beginning during which `tau_init` is applied.
+        The rest of time will use `tau`.
+
+    Returns
+    -------
+    powspec_norm: numpy.ndarray
+        Normalized short-time power spectra with dimension (T,F).
+
+    """
+    alpha = np.exp(-frameshift / tau)
+    alpha0 = np.exp(-frameshift / tau_init)  # fast adaptation
+    init_frames = math.ceil(t_init / frameshift)
+    assert init_frames < len(powspec)
+
+    mu = np.empty_like(powspec)
+    var = np.empty_like(powspec)
+    # Start with global mean and variance
+    mu[0] = alpha0 * powspec.mean(axis=0) + (1-alpha0)*powspec[0]
+    var[0] = alpha0 * (powspec**2).mean(axis=0) + (1-alpha0)*(powspec[0]**2)
+    for ii in range(1, init_frames):
+        mu[ii] = alpha0*mu[ii-1] + (1-alpha0)*powspec[ii]
+        var[ii] = alpha0*var[ii-1] + (1-alpha0)*(powspec[ii]**2)
+    for ii in range(init_frames, len(powspec)):
+        mu[ii] = alpha*mu[ii-1] + (1-alpha)*powspec[ii]
+        var[ii] = alpha*var[ii-1] + (1-alpha)*(powspec[ii]**2)
+
+    return (powspec - mu) / np.maximum(np.sqrt(
+        np.maximum(var-mu**2, 0)), 1e-12)
