@@ -210,6 +210,47 @@ class WeightdropLSTM(nn.LSTM):
         return super(WeightdropLSTM, self).forward(inp, hx=hx)
 
 
+class ResRNN(torch.nn.Module):
+    """GRU or LSTM with residual connection between layers."""
+
+    def __init__(self, indim, residues, gru=True):
+        """Instantiate a ResRNN network.
+
+        Parameters
+        ----------
+        indim: int
+            Input feature dimension. This will also be the output dimension.
+        residues: tuple(bool)
+            Whether there is residual connection in each hidden layer.
+
+        Keyword Parameters
+        ------------------
+        gru: bool, True
+            If True, use GRU as the recurrent unit. Otherwise use LSTM.
+
+        """
+        super(ResRNN, self).__init__()
+        self.indim = self.outdim = indim
+        self.use_gru = gru
+        cell = ExtendedGRU if gru else ExtendedLSTM
+        self.rnns = nn.ModuleList([cell(indim, indim) for _ in residues])
+        self.residues = residues
+
+    def forward(self, x):
+        """Assume x is a PackedSequence."""
+        assert isinstance(x, PackedSequence), "Input is not PackedSequence!"
+
+        for rnn, res in zip(self.rnns, self.residues):
+            h, hn = rnn(x)
+            if res:
+                x = PackedSequence(data=h.data+x.data,
+                                   batch_sizes=h.batch_sizes)
+            else:
+                x = h
+
+        return x, hn
+
+
 class ARMA(Module):
     """A RNN mimicking the AutoRegressive Moving Averge linear filter."""
 
