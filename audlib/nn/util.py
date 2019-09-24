@@ -1,7 +1,6 @@
 """Utility Functions and Neural Networks."""
 import numpy as np
 import torch
-import torch.nn.functional as F
 
 
 def detach(states):
@@ -19,6 +18,11 @@ def printnn(model):
     for name, param in model.named_parameters():
         if param.requires_grad:
             print("{}[{}]\n{}".format('-' * 30, name, param.data.numpy()))
+
+
+def numparams(model):
+    """Calculate the total number of learnable parameters."""
+    return sum(p.numel() for p in model.parameters())
 
 
 class UnpackedSequence(object):
