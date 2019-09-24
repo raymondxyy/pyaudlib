@@ -96,7 +96,7 @@ class LibriSpeakers(SIDDataset):
         self.samplerate = sr
         self._filepaths = lsfiles(
             root,
-            filt=lambda p: self.isflac(p) and filt(p) if filt else self.isflac,
+            filt=(lambda p: self.isflac(p) and filt(p)) if filt else self.isflac,
             relpath=True
         )
 
