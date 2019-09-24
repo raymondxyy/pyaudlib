@@ -57,9 +57,8 @@ class RandSample(AudioDataset):
 
         def _filt(path):
             """Filter based on audio lengths."""
-            blen = no_shorter_than(path, minlen, unit)
-            bcus = True if not filt else filt(path)
-            return self.isaudio(path) and blen and bcus
+            return self.isaudio(path) and no_shorter_than(path, minlen, unit)\
+                and (True if not filt else filt(path))
 
         super(RandSample, self).__init__(root, filt=_filt)
 
