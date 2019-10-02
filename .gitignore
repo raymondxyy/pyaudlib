@@ -2,7 +2,7 @@
 .vscode/
 
 # sph2pipe
-tools/sph2pipe/sph2pipe
+audlib/tools/sph2pipe/sph2pipe
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
