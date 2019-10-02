@@ -3,7 +3,7 @@ import numpy as np
 from scipy.signal import hilbert, lfilter
 from scipy.fftpack import dct, idct
 
-from .util import asymfilt
+from .util import asymfilt, nextpow2
 
 
 def pncc(powerspec, medtime=2, medfreq=4, synth=False,
@@ -103,7 +103,8 @@ def pnccspec(powerspec, **kwargs):
     return idct(pncc(powerspec, **kwargs), n=powerspec.shape[1], norm='ortho')
 
 
-def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0):
+def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
+         ndft=None):
     """Spectral-temporal response fields for both up and down direction.
 
     Implement the STRF described in Chi, Ru, and Shamma:
@@ -132,7 +133,7 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0):
     theta: float
         Orientation of time evolution in radians.
 
-    """
+    """    
     def _hs(x, scale):
         """Construct a 1-D spectral impulse response with a 2-diff Gaussian.
 
@@ -152,12 +153,15 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0):
     hs = _hs(np.linspace(-freq, freq, endpoint=False,
              num=int(2*freq*bins_per_octave)), scale)
     ht = _ht(np.linspace(0, time, endpoint=False, num=int(sr*time)), rate)
-    hsa = hilbert(hs)
-    hta = hilbert(ht)
+    if ndft is None:
+        ndft = max(512, nextpow2(max(len(hs), len(ht))))
+        ndft = max(len(hs), len(ht))
+    assert ndft >= max(len(ht), len(hs))
+    hsa = hilbert(hs, ndft)[:len(hs)]
+    hta = hilbert(ht, ndft)[:len(ht)]
     hirs = hs * np.cos(phi) + hsa.imag * np.sin(phi)
     hirt = ht * np.cos(theta) + hta.imag * np.sin(theta)
-    hirs_ = hilbert(hirs)
-    hirt_ = hilbert(hirt)
-
+    hirs_ = hilbert(hirs, ndft)[:len(hs)]
+    hirt_ = hilbert(hirt, ndft)[:len(ht)]
     return np.outer(hirt_, hirs_).real,\
         np.outer(np.conj(hirt_), hirs_).real
