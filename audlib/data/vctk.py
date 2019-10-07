@@ -263,7 +263,8 @@ class SEVCTK2chan(SEDataset):
                                         Audio(x2[tstart:tend], sr)],
                                  clean=Audio(xC[tstart:tend], sr),
                                  noise=Audio(n1[tstart:tend], sr),
-                                 snr=10*np.log10((x1**2).sum()/(n1**2).sum()))
+                                 snr=(xC[tstart:tend]**2).sum() /
+                                     (n1[tstart:tend]**2).sum())
 
         if self.transform:
             sample = self.transform(sample)
