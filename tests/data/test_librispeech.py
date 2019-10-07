@@ -3,11 +3,8 @@ from audlib.data.librispeech import LibriSpeakers
 
 
 def test_librispeakers():
-    dataset = LibriSpeakers('/home/xyy/Downloads/LibriSpeech')
-    print(dataset)
-    dataset = LibriSpeakers('/home/xyy/Downloads/LibriSpeech', (.5, .5))
-    print(dataset)
-    dataset = LibriSpeakers('/home/xyy/Downloads/LibriSpeech', (.8, .1, .1))
+    dataset = LibriSpeakers('/home/xyy/Downloads/LibriSpeech', (.5, .4, .1),
+                            shuffle=True)
     print(dataset)
     sample = dataset.trainset[0]
     return

@@ -1,8 +1,9 @@
 """Dataset classes for LibriSpeech."""
 import os
+import random
 import numpy as np
 
-from .dataset import SIDDataset, AudioDataset, audioread, lsfiles, LstDataset
+from .dataset import SIDDataset, audioread, lsfiles, LstDataset
 from .datatype import AudioSpeaker
 
 from ..io.audio import audioinfo
@@ -58,7 +59,7 @@ class LibriSpeakers(SIDDataset):
             dur_accum, p) for p in np.cumsum(proportions)[:-1])
 
     def __init__(self, root, splits=(1,), sr=None, filt=None, read=None,
-                 transform=None):
+                 transform=None, shuffle=False, seed=0):
         """Instantiate an audio dataset.
 
         Parameters
@@ -99,6 +100,10 @@ class LibriSpeakers(SIDDataset):
             filt=(lambda p: self.isflac(p) and filt(p)) if filt else self.isflac,
             relpath=True
         )
+
+        if shuffle:
+            random.seed(seed)
+            random.shuffle(self._filepaths)
 
         # Speaker-duration dry run
         # spkr_dur[sid] = [(idx, duration)]
