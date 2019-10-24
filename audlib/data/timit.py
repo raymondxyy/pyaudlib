@@ -329,4 +329,4 @@ def randselphon(sample, phonfunc=None):
         while not phonfunc(ph):
             (ns, ne), ph = sample.phonemeseq[randrange(len(sample.phonemeseq))]
 
-    return sample.signal[ns:ne]
+    return sample.signal[ns:ne], ph
