@@ -22,27 +22,24 @@ Some use cases of pyaudlib are:
 pyaudlib focuses on correctness, efficiency, and simplicity. Signal processing functionalities are mathematically checked whenever possible (e.g. constant overlap-add, `istft(stft(X))==X`), and benchmarked in comparison to popular speech or audio processing toolbox (e.g. librosa). Deep neural networks and the training pipeline are consistent with that of PyTorch and torchvision.
 
 ## Installation
+```sh
+pip install audlib
+```
 
-0. Install prerequisite
+## Developer Installation
+In the source directory, install the library with test dependencies:
 ```sh
-pip install pipenv
+pip install ".[tests]"
 ```
-1. Install dependencies in virtual environment using `pipenv`
-```sh
-pipenv install
-```
-2. Activate the virtual environment
-```sh
-pipenv shell
-```
-3. If not using Windows, cd into `pyaudlib/tools/sph2pipe/` and compile the package
-```sh
-gcc -o sph2pipe *.c -lm
-```
-4. Verify the installation with unit testing on the `sig` module
+Run test:
 ```sh
 python -m pytest tests/sig
 ```
+
+## Release flow
+1. Bump version in setup.py.
+2. Package release: `python setup.py sdist bdist_wheel`
+3. Upload release: `twine upload --repository-url https://upload.pypi.org/legacy/ dist/*`
 
 ## Usage example
 
