@@ -4,6 +4,7 @@ from scipy.signal import lfilter
 
 from .sig.stproc import numframes, stana
 from .sig.temporal import zcrate, lpc_parcor, lpcerr
+from .enhance import priori2filt
 
 
 class ZCREnergy(object):
@@ -42,14 +43,14 @@ class SpectralEnergy(object):
 
     """
 
-    def __init__(self, sr, nfft, fmin=300., fmax=4000.):
+    def __init__(self, sr, nfft, fmin=300., fmax=4500.):
         """Instantiate a VAD class.
 
         Keyword Parameters
         ------------------
         fmin: float, 300
             Minimum frequency from which energy is collected.
-        fmax: float, 4000
+        fmax: float, 4500
             Maximum frequency from which energy is collected.
 
         """
@@ -65,7 +66,7 @@ class SpectralEnergy(object):
         Keyword Parameters
         ------------------
         dbfloor: float, -30
-            Energy floor for a frame below maximum energy to be considered speech.
+            Energy floor for a frame below maximum energy to be voiced.
         smoothframes: int, 0
             Number of frames to apply a moving-average filter on power contour.
 
@@ -76,3 +77,44 @@ class SpectralEnergy(object):
             pspec = lfilter(1/smoothframes * np.ones(smoothframes), 1, pspec)
         return pspec > (10**(dbfloor/10))*pspec.max()
 
+
+def asnr_spec(noisyspec, snrsmooth=.98, noisesmooth=.98, llkthres=.15,
+              rule='wiener'):
+    # TODO: Test and improve this.
+    """Implement the a-priori SNR estimation described by Scalart and Filho.
+
+    This is very similar to `asnr`, except it's computed directly on noisy
+    magnitude spectra instead of time-domain signals.
+
+    Outputs
+    -------
+    xfilt: ndarray
+        Filtered magnitude spectrogram.
+    priori: ndarray
+        A priori SNR.
+    posteri: ndarray
+        A posteriori SNR.
+    vad: ndarray
+        Speech-presence log likelihood ratio.
+
+    """
+    # Estimate initial noise PSD
+    npsd = np.mean(noisyspec[:6, :]**2, axis=0)
+    vad = np.empty(len(noisyspec))
+    for ii, xspec in enumerate(noisyspec):
+        xpsd = np.abs(xspec)**2
+        posteri = xpsd / npsd
+        posteri_prime = np.maximum(posteri - 1, 0)  # half-wave rectify
+        if ii == 0:  # initialize priori SNR
+            priori = snrsmooth + (1-snrsmooth)*posteri_prime
+        else:
+            priori = snrsmooth*(priori2filt(priori, rule)**2)\
+                * posteri + (1-snrsmooth)*posteri_prime
+        # compute speech presence log likelihood
+        llk = posteri*priori / (1+priori) - np.log(1+priori)
+        vad[ii] = np.mean(llk)
+        if vad[ii] < llkthres:
+            # noise only frame found, update Pn
+            npsd = noisesmooth*npsd + (1-noisesmooth)*xpsd
+
+    return vad >= llkthres
