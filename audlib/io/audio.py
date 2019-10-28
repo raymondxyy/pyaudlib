@@ -190,7 +190,7 @@ def audioread(path, sr=None, start=0, stop=None, force_mono=False,
         return x, xsr
 
 
-def audiowrite(data, sr, outpath, norm=True, verbose=False):
+def audiowrite(data, sr, outpath, norm=True):
     """Write a numpy array into an audio file.
 
     Parameters
@@ -204,22 +204,13 @@ def audiowrite(data, sr, outpath, norm=True, verbose=False):
     norm: bool, optional
         Normalize amplitude by scaling so that maximum absolute amplitude is 1.
         Default to true.
-    verbose: bool, optional
-        Print to console. Default to false.
 
     """
     absmax = np.max(np.abs(data))  # in case all entries are 0s
     if norm and (absmax != 0):
         data /= absmax
-    outpath = os.path.abspath(outpath)
-    outdir = os.path.dirname(outpath)
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
-    if verbose:
-        print("Writing to {}".format(outpath))
-    sf.write(outpath, data, sr)
 
-    return
+    return sf.write(outpath, data.T, sr)
 
 
 def chk_duration(path, minlen=None, maxlen=None, unit='second'):
