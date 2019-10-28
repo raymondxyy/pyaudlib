@@ -1,23 +1,18 @@
 """Test suite for RATS dataset."""
+import os
+import pytest
 from audlib.data.rats import SERATS_SAD, RATS_SAD
 
 
+@pytest.mark.skipif('RATS_SAD_ROOT' not in os.environ,
+                    reason='ENV $RATS_SAD_ROOT unspecified.')
 def test_SERATS_SAD():
-    root = '/home/xyy/data/RATS_SAD'  # change to your directory
-
-    dataset = SERATS_SAD(root, channels='AH')
+    dataset = SERATS_SAD(os.environ['RATS_SAD_ROOT'], channels='AH')
     assert len(dataset) == 320
 
 
+@pytest.mark.skipif('RATS_SAD_ROOT' not in os.environ,
+                    reason='ENV $RATS_SAD_ROOT unspecified.')
 def test_RATS_SAD():
-    root = '/home/xyy/data/RATS_SAD'
-    dataset = RATS_SAD(root, 'dev-1')
-    print(dataset)
+    dataset = RATS_SAD(os.environ['RATS_SAD_ROOT'], 'dev-1')
     assert len(dataset) == 391402
-    dataset = RATS_SAD(root, 'dev-2', filt=lambda seg: seg[1] == 's')
-    print(dataset)
-
-
-if __name__ == '__main__':
-    test_SERATS_SAD()
-    test_RATS_SAD()

@@ -1,23 +1,14 @@
 """Test suite for ESC50 class."""
+import os
+import pytest
 from audlib.data.esc50 import ESC50
 
 
+@pytest.mark.skipif('ESC50_ROOT' not in os.environ,
+                    reason='ENV $ESC50_ROOT unspecified.')
 def test_esc50():
-    dataset = ESC50('/home/xyy/data/ESC-50')
+    dataset = ESC50(os.environ['ESC50_ROOT'])
     print(dataset)
-    harmonicset = ESC50('/home/xyy/data/ESC-50',
-                        categories=[
-                            'crying_baby',
-                            'clock_alarm',
-                            'door_wood_creaks',
-                            'cow',
-                            'cat',
-                            'church_bells',
-                            'rooster',
-                            'siren',
-                        ])
-    print(harmonicset)
-
     return
 
 

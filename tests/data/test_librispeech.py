@@ -1,13 +1,17 @@
 """Test suite for LibriSpeech."""
+import os
+import pytest
 from audlib.data.librispeech import LibriSpeakers
 
 
+@pytest.mark.skipif('LIBRISPEECH_ROOT' not in os.environ,
+                    reason='ENV $LIBRISPEECH_ROOT unspecified.')
 def test_librispeakers():
-    dataset = LibriSpeakers('/home/xyy/Downloads/LibriSpeech', (.5, .4, .1),
+    #TODO
+    dataset = LibriSpeakers(os.environ['LIBRISPEECH_ROOT'], (.5, .4, .1),
                             shuffle=True)
     print(dataset)
-    sample = dataset.trainset[0]
-    return
+
 
 
 if __name__ == "__main__":
