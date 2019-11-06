@@ -6,7 +6,6 @@ from audlib.sig.window import hamming
 from audlib.sig.transform import stpowspec, stft, istft
 from audlib.sig.fbanks import Gammatone
 from audlib.sig.spectemp import pncc, invspec
-from audlib.io.audio import audiowrite
 
 
 def test_strf():
@@ -42,6 +41,7 @@ def test_pncc():
 
 
 def test_invpnspec():
+    # TODO
     sig, sr = welcome()
     wlen = .025
     hop = .01
@@ -58,7 +58,7 @@ def test_invpnspec():
     maskfull = invspec(mask40, wts)
     sigsynth = istft((maskfull**.5)*spec, sr, wind, hop, nfft, zphase=True)
 
-    return audiowrite(sigsynth, sr, 'samples/welcome-pncc.wav')
+    return
 
 
 if __name__ == "__main__":
