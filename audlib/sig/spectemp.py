@@ -54,7 +54,7 @@ def pncc(powerspec, medtime=2, medfreq=4, synth=False,
     else:
         qtild_tm = 0
 
-    # C-D. Track floor of noise floor
+    # C-D. Track floor of high-passed power envelope
     qtild_f = asymfilt(qtild0, .999, .5, zi=.9*qtild0[0])
     qtild1 = np.maximum(qtild_tm, qtild_f)
 
@@ -79,6 +79,9 @@ def pncc(powerspec, medtime=2, medfreq=4, synth=False,
     mu, _ = lfilter([1-lambda_mu], [1, -lambda_mu], meanpower,
                     zi=[meanpower.mean()])
 
+    if synth:  # return mask only
+        return stild / mu[:, np.newaxis]
+
     out /= mu[:, np.newaxis]  # U[m,l] in eq.16, ignoring the k constant
 
     # G. Rate-level nonlinearity
@@ -95,12 +98,32 @@ def pncc(powerspec, medtime=2, medfreq=4, synth=False,
     return out
 
 
-def pnccspec(powerspec, **kwargs):
+def pnspec(powerspec, **kwargs):
     """Power spectrum derived from Power-Normalized Cepstral Coefficients.
 
     See `pncc` for a complete list of function parameters.
     """
     return idct(pncc(powerspec, **kwargs), n=powerspec.shape[1], norm='ortho')
+
+
+def invspec(tkspec, fkwgts):
+    """Invert a short-time spectra or mask with reduced spectral dimensions.
+
+    This is useful when you have a representation like a mel-frequency power
+    spectra and want an **approximated** linear frequency power spectra.
+
+    Parameters
+    ----------
+    tkspec: numpy.ndarray
+        T x K short-time power spectra with compressed spectral dim.
+    fkwgts: numpy.ndarray
+        F x K frequency-weighting matrix used to transform a full power spec.
+
+    Returns
+    -------
+        T x F inverted short-time spectra.
+    """
+    return (tkspec @ fkwgts.T) / fkwgts.sum(axis=1)
 
 
 def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
