@@ -3,9 +3,10 @@ import numpy as np
 from audlib.sig.spectemp import strf
 from audlib.quickstart import welcome
 from audlib.sig.window import hamming
-from audlib.sig.transform import stpowspec
+from audlib.sig.transform import stpowspec, stft, istft
 from audlib.sig.fbanks import Gammatone
-from audlib.sig.spectemp import pncc
+from audlib.sig.spectemp import pncc, invspec
+from audlib.io.audio import audiowrite
 
 
 def test_strf():
@@ -40,6 +41,26 @@ def test_pncc():
     return coef
 
 
+def test_invpnspec():
+    sig, sr = welcome()
+    wlen = .025
+    hop = .01
+    nfft = 1024
+    wind = hamming(int(wlen*sr))
+    spec = stft(sig, sr, wind, hop, nfft, synth=True, zphase=True)
+    pspec = spec.real**2 + spec.imag**2
+    gtbank = Gammatone(sr, 40)
+
+    wts = gtbank.gammawgt(nfft, powernorm=True, squared=True)
+    gammaspec = pspec @ wts
+
+    mask40 = pncc(gammaspec, tempmask=True, synth=True)
+    maskfull = invspec(mask40, wts)
+    sigsynth = istft((maskfull**.5)*spec, sr, wind, hop, nfft, zphase=True)
+
+    return audiowrite(sigsynth, sr, 'samples/welcome-pncc.wav')
+
+
 if __name__ == "__main__":
     #test_strf()
-    test_pncc()
+    test_invpnspec()
