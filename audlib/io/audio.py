@@ -7,15 +7,57 @@ import numpy as np
 import os
 import subprocess
 import io
+import subprocess
 import platform
+
+
+class WorkingDirectory:
+    def __init__(self, dirpath):
+        self.old_dirpath = os.getcwd()
+        self.dirpath = dirpath
+
+    def __enter__(self):
+        os.chdir(self.dirpath)
+        return self
+
+    def __exit__(self, type, value, traceback):
+        os.chdir(self.old_dirpath)
+
 
 # Global variables used in this module
 _sph2pipe = os.path.join(
     os.path.dirname(__file__),
-    '../../tools/sph2pipe/',
+    '../tools/sph2pipe/',
     'sph2pipe.exe' if platform.system() == 'Windows' else 'sph2pipe')
 
-assert os.path.exists(_sph2pipe)
+# Compile if not exist
+if not os.path.exists(_sph2pipe):
+    try:
+        subprocess.check_output(['gcc', '--version'])
+    except OSError:
+        print('gcc is not installed on your system or it is not in PATH. Please, make sure gcc is accessible through PATH.', file=sys.stderr)
+    
+    file_dir = os.path.dirname(os.path.realpath(__file__))
+    build_dir = os.path.join(file_dir, '..', 'tools', 'sph2pipe')
+    with WorkingDirectory(build_dir):
+        gcc_cmd = [
+            'gcc',
+            # Remove sph2pipe-specific warnings
+            '-Wno-implicit-function-declaration',
+            '-Wno-pointer-sign',
+            '-Wno-format',
+            '-Wno-implicit-int',
+            '-Wno-return-type',
+            # Set the output to sph2pipe
+            '-o',
+            'sph2pipe',
+            # Need to list all .c files here
+            'sph2pipe.c',
+            'file_headers.c',
+            'shorten_x.c',
+            '-lm']
+        subprocess.check_call(gcc_cmd)
+        print("sph2pipe compiled!")
 
 
 def sphereinfo(path):
@@ -148,7 +190,7 @@ def audioread(path, sr=None, start=0, stop=None, force_mono=False,
         return x, xsr
 
 
-def audiowrite(data, sr, outpath, norm=True, verbose=False):
+def audiowrite(data, sr, outpath, norm=True):
     """Write a numpy array into an audio file.
 
     Parameters
@@ -162,22 +204,13 @@ def audiowrite(data, sr, outpath, norm=True, verbose=False):
     norm: bool, optional
         Normalize amplitude by scaling so that maximum absolute amplitude is 1.
         Default to true.
-    verbose: bool, optional
-        Print to console. Default to false.
 
     """
     absmax = np.max(np.abs(data))  # in case all entries are 0s
     if norm and (absmax != 0):
         data /= absmax
-    outpath = os.path.abspath(outpath)
-    outdir = os.path.dirname(outpath)
-    if not os.path.exists(outdir):
-        os.makedirs(outdir)
-    if verbose:
-        print("Writing to {}".format(outpath))
-    sf.write(outpath, data, sr)
 
-    return
+    return sf.write(outpath, data.T, sr)
 
 
 def chk_duration(path, minlen=None, maxlen=None, unit='second'):

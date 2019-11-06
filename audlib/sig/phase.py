@@ -4,6 +4,7 @@
 # Change log:
 #   09/07/17:
 #       * Create this file
+# TODO: Update this
 from .transform import *
 import numpy as np
 from numpy.fft import rfft, irfft
@@ -67,32 +68,3 @@ def griffin_lim(X_mag, x=None, zero_phase=False, iters=100, verbose=False):
             print(err[i])
 
     return x_est
-
-
-######### Use as standalone application ############
-if __name__ == '__main__':
-    import argparse
-    from audio_io import audioread, audiowrite
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('-iter', help='Iteration number (default to 100)',
-                        required=False, type=int, default=100)
-    parser.add_argument('-i', help='Input file', required=True)
-    parser.add_argument('-o', help='Output file', required=True)
-    parser.add_argument('-z', help='Enable zero-phase. Default to phase of white noise.', required=False,
-                        action='store_true', default=False)
-    parser.add_argument('-v', help='Verbose', required=False,
-                        action='store_true', default=False)
-    args = parser.parse_args()
-
-    # Processing block
-    x, sr = audioread(args.i, sr=CONFIG_GL['SAMPLE_RATE'],
-                      force_mono=True, verbose=args.v)
-    X_mag = magphase(stft(x, CONFIG_GL['SAMPLE_RATE'],
-                          window_length=CONFIG_GL['WINDOW_LENGTH'],
-                          hop_fraction=CONFIG_GL['HOP_FRACTION'],
-                          nfft=CONFIG_GL['FFT_SIZE'])[-1])[0]
-    x_est = griffin_lim(X_mag, x=x, zero_phase=args.z, iters=args.iter,
-                        verbose=args.v)
-    audiowrite(x_est, CONFIG_GL['SAMPLE_RATE'], args.o,
-               normalize=True, verbose=args.v)
