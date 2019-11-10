@@ -1,12 +1,13 @@
-# very simple travis file to test how things are going
+# Supports Ubuntu 16.04 by default
 env:
     - PYTHONPATH=`pwd`
 language: python 
 python:
+    - "3.0"
     - "3.6"
+    - "3.7"
 install:
-    - pip install pipenv
-    - pipenv sync
-before_script:
-    - gcc -o tools/sph2pipe/sph2pipe tools/sph2pipe/*.c -lm
+    - python -m setup.py install
+# before_script:
+#    - gcc -o tools/sph2pipe/sph2pipe tools/sph2pipe/*.c -lm
 script: pytest tests/sig
