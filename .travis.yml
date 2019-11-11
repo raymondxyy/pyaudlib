@@ -2,12 +2,11 @@
 env:
     - PYTHONPATH=`pwd`
 language: python 
-python:
-    - "3.0"
+python: # 3.0 is not supported on Travis CI
     - "3.6"
     - "3.7"
 install:
-    - python -m setup.py install
+    - python setup.py install
 # before_script:
 #    - gcc -o tools/sph2pipe/sph2pipe tools/sph2pipe/*.c -lm
 script: pytest tests/sig
