@@ -1,7 +1,5 @@
-# Supports Ubuntu 16.04 by default
 os:
-    - linux
-    - osx
+    - linux # Supports Ubuntu 16.04 by default
 env:
     - PYTHONPATH=`pwd`
 language: python 
