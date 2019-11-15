@@ -14,16 +14,16 @@ with open('README.md', 'r') as fh:
 
 setup(
     name='audlib',
-    version='0.0.1',
+    version='0.0.1.1',
     author='Raymond Xia',
     author_email='raymondxia@cmu.edu',
-    description='Audio and Speech Processing Library',
+    description='A speech signal processing library with emphasis on deep learning.',
     long_description=long_description,
     long_description_content_type='text/markdown',
     url='https://github.com/raymondxyy/pyaudlib',
     download_url='https://github.com/raymondxyy/pyaudlib/archive/v_01.tar.gz',
     packages=find_packages(),
-    include_package_data = True,
+    include_package_data=True,
     classifiers=[
         'License :: OSI Approved :: MIT License',
         'Development Status :: 3 - Alpha',
@@ -34,7 +34,7 @@ setup(
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
     ],
-    keywords=['SPEECH', 'AUDIO', 'SIGNAL', 'SOUND'],
+    keywords=['SPEECH', 'AUDIO', 'SIGNAL', 'SOUND', 'DEEP LEARNING', 'NEURAL NETWORKS'],
     license='MIT',
     install_requires=[
         'click >= 7.0',
