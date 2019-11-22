@@ -16,9 +16,9 @@ from numpy.fft import rfft, irfft
 from scipy.fftpack import dct
 
 from .stproc import numframes, stana, ola
-from .spectral import logmag, realcep, compcep
+from .spectral import logmag
 from .temporal import xcorr
-from .auditory import hz2mel, dft2mel
+from .cepstral import rcep_dft, ccep_zt
 
 
 def stft(sig, sr, wind, hop, nfft, center=True, synth=False, zphase=False):
@@ -132,7 +132,7 @@ def stmfcc(sig, sr, wind, hop, nfft, melbank, synth=False):
         norm='ortho')
 
 
-def stlogm(sig, sr, wind, hop, nfft, synth=False, floor=-10.):
+def stlogm(sig, sr, wind, hop, nfft, synth=False, floor=-80.):
     """Short-time Log Magnitude Spectrum.
 
     Implement short-time log magnitude spectrum. Discrete frequency bins that
@@ -148,7 +148,7 @@ def stlogm(sig, sr, wind, hop, nfft, synth=False, floor=-10.):
                   floor=floor)
 
 
-def strcep(sig, sr, wind, hop, n, synth=False, floor=-10.):
+def strcep(sig, sr, wind, hop, n, synth=False, nfft=4096, floor=-80.):
     """Short-time real cepstrum.
 
     Implement short-time (real) cepstrum. Discrete frequency bins that
@@ -161,8 +161,8 @@ def strcep(sig, sr, wind, hop, n, synth=False, floor=-10.):
         DFT size.
     synth: bool
         Aligned time frames with STFT synthesis.
-    floor: float [-10.]
-        flooring for log(0)
+    floor: float, -80
+        Log-magnitude floor in dB.
 
     Returns
     -------
@@ -175,17 +175,17 @@ def strcep(sig, sr, wind, hop, n, synth=False, floor=-10.):
     nframe = numframes(sig, sr, wind, hop, synth=synth)
     out = np.empty((nframe, n))
     for ii, frame in enumerate(stana(sig, sr, wind, hop, synth=synth)):
-        out[ii] = realcep(frame, n, floor=floor)
+        out[ii] = rcep_dft(frame, n, nfft, floor)
 
     return out
 
 
-def stccep(sig, sr, wind, hop, n, synth=False, floor=-10.):
+def stccep(sig, sr, wind, hop, n, synth=False):
     """Short-time complex cepstrum."""
     nframe = numframes(sig, sr, wind, hop, synth=synth)
-    out = np.empty((nframe, 2*n+1))
+    out = np.empty((nframe, 2*n-1))
     for ii, frame in enumerate(stana(sig, sr, wind, hop, synth=synth)):
-        out[ii] = compcep(frame, n, floor=floor)
+        out[ii] = ccep_zt(frame, n)
 
     return out
 
@@ -230,62 +230,3 @@ def stcqt(sig, fr, cqbank):
 
     """
     return cqbank.cqt(sig, fr)
-
-# Legacy functions below
-
-
-def audspec(pspectrum, nfft=512, sr=16000., nfilts=0, fbtype='mel',
-            minfrq=0, maxfrq=8000., sumpower=True, bwidth=1.0):
-    if nfilts == 0:
-        nfilts = np.int(np.ceil(hz2mel(np.array([maxfrq]), sphinx=False)[0]/2))
-    if fbtype == 'mel':
-        wts, _ = dft2mel(nfft, sr=sr, nfilts=nfilts, width=bwidth,
-                         minfrq=minfrq, maxfrq=maxfrq)
-    else:
-        raise ValueError('Filterbank type not supported.')
-
-    nframes, nfrqs = pspectrum.shape
-    wts = wts[:, :nfrqs]
-
-    if sumpower:  # weight power
-        aspectrum = pspectrum.dot(wts.T)
-    else:  # weight magnitude
-        aspectrum = (np.sqrt(pspectrum).dot(wts.T))**2
-
-    return aspectrum, wts
-
-
-def invaudspec(aspectrum, nfft=512, sr=16000., nfilts=0, fbtype='mel',
-               minfrq=0., maxfrq=8000., sumpower=True, bwidth=1.0):
-    # TODO: Either update or remove this.
-    if fbtype == 'mel':
-        wts, _ = dft2mel(nfft, sr=sr, nfilts=nfilts, width=bwidth,
-                         minfrq=minfrq, maxfrq=maxfrq)
-    else:
-        raise ValueError('Filterbank type not supported.')
-
-    nframes, nfilts = aspectrum.shape
-    # Cut off 2nd half
-    wts = wts[:, :((nfft/2)+1)]
-
-    # Just transpose, fix up
-    ww = wts.T.dot(wts)
-    iwts = wts / np.matlib.repmat(np.maximum(np.mean(np.diag(ww))/100.,
-                                             np.sum(ww, axis=0)), nfilts, 1)
-
-    #iwts = np.linalg.pinv(wts).T
-    # Apply weights
-    if sumpower:  # weight power
-        spec = aspectrum.dot(iwts)
-    else:  # weight magnitude
-        spec = (np.sqrt(aspectrum).dot(iwts))**2
-    return spec
-
-
-def invaudspec_mask(aspectrum, weights):
-    # TODO: Either update or remove this.
-    energy = np.ones_like(aspectrum).dot(weights)
-    mask = aspectrum.dot(weights)
-    not_zero_energy = ~(energy == 0)
-    mask[not_zero_energy] /= energy[not_zero_energy]
-    return mask

@@ -27,12 +27,6 @@ def magphase(cspectrum, unwrap=False):
     return mag, phs
 
 
-def logmagphase(cspectrum, unwrap=False, floor=-10.):
-    """Compute (log-magnitude, phase) of complex spectrum."""
-    mag, phs = magphase(cspectrum, unwrap=unwrap)
-    return logmag(mag, floor=floor), phs
-
-
 def logmag(sig, floor=-80.):
     """Compute natural log magnitude of complex spectrum.
 
@@ -233,92 +227,6 @@ def idct2(x_dct2, norm=True, dft=False):
             cos = np.cos(np.pi*ks*(2*n+1)/(2*ndct))
             x[n] = cos.dot(Xb)
     return x
-
-
-def realcep(frame, n, nfft=4096, floor=-10., comp=False, ztrans=False):
-    """Compute real cepstrum of short-time signal `frame`.
-
-    There are two modes for calculation:
-        1. complex = False (default). This calculates c[n] using inverse DFT
-        of the log magnitude spectrum.
-        2. complex = True. This first calculates the complex cepstrum through
-        the z-transform method (see `compcep`), and takes the even function to
-        obtain c[n].
-    In both cases, `len(cep) = nfft//2+1`.
-
-    Parameters
-    ----------
-    frame: 1-D ndarray
-        signal to be processed.
-    nfft: non-negative int
-        nfft//2+1 cepstrum in range [0, nfft//2] will be evaluated.
-    floor: float [-10.]
-        flooring for log(0). Ignored if complex=True.
-    complex: boolean [False]
-        Use mode 2 for calculation.
-
-    Returns
-    -------
-    cep: 1-D ndarray
-        Real ceptra of signal `frame` of:
-        1. length `len(cep) = nfft//2+1`.
-        2. quefrency index [0, nfft//2].
-
-    """
-    if comp:  # do complex method
-        ccep = compcep(frame, n-1, ztrans=ztrans)
-        rcep = .5*(ccep+ccep[::-1])
-        return rcep[n-1:]  # only keep non-negative quefrency
-    else:  # DFT method
-        rcep = irfft(logmag(rfft(frame, nfft), floor=floor))
-        return rcep[:n]
-
-
-def compcep(frame, n, nfft=4096, floor=-10., ztrans=False):
-    """Compute complex cepstrum of short-time signal using Z-transform.
-
-    Compute the aliasing-free complex cepstrum using Z-transform and polynomial
-    root finder. Implementation is based on RS eq 8.68 on page 436.
-
-    Parameters
-    ----------
-    frame: 1-D ndarray
-        signal to be processed.
-    n: non-negative int
-        index range [-n, n] in which complex cepstrum will be evaluated.
-
-    Returns
-    -------
-    cep: 1-D ndarray
-        complex ceptrum of length `2n+1`; quefrency index [-n, n].
-
-    """
-    if ztrans:
-        frame = np.trim_zeros(frame)
-        f0 = frame[0]
-        roots = np.roots(frame/f0)
-        rmag = np.abs(roots)
-        assert 1 not in rmag
-        ra, rb = roots[rmag < 1], roots[rmag > 1]
-        amp = f0 * np.prod(rb)
-        if len(rb) % 2:  # odd number of zeros outside UC
-            amp = -amp
-        # obtain complex cepstrum through eq (8.68) in RS, pp. 436
-        cep = np.zeros(2*n+1)
-        if rb.size > 0:
-            for ii in range(-n, 0):
-                cep[-n+ii] = np.real(np.sum(rb**ii))/ii
-        cep[n] = np.log(np.abs(amp))
-        if ra.size > 0:
-            for ii in range(1, n+1):
-                cep[n+ii] = -np.real(np.sum(ra**ii))/ii
-    else:
-        assert n <= nfft//2
-        spec = rfft(frame, n=nfft)
-        lmag, phase = logmagphase(spec, unwrap=True, floor=floor)
-        cep = irfft(lmag+1j*phase, n=nfft)[:2*n+1]
-        cep = np.roll(cep, n)
-    return cep
 
 
 def mvnorm1(powspec, frameshift, tau=3., tau_init=.1, t_init=.2):
