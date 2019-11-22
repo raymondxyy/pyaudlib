@@ -5,7 +5,7 @@ from audlib.quickstart import welcome
 from audlib.sig.cepstral import rcep_zt, rcep_dft, ccep_zt, ccep_dft
 
 
-def test_ceps():
+def test_cceps():
     """Test complex cepstrum function using the impulse response of an echo.
 
     Taken from example 8.3 of RS, page 414.
@@ -20,25 +20,26 @@ def test_ceps():
 
     cepsize = 150
     # construct reference
-    cepref = np.zeros(cepsize)
-    for kk in range(1, cepsize // Np+1):
-        cepref[kk*Np] = (-1)**(kk+1) * (alpha**kk)/kk
+    cepref = np.zeros(2*cepsize-1)
+    deltalocs = np.zeros_like(cepref, dtype='bool')
+    deltalocs[cepsize-1+Np::Np] = True
+    cepref[deltalocs] = np.array( # first delta at x[Np]
+        [(-1)**(k+1) * (alpha**k)/k for k in range(
+            1, cepref[deltalocs].size+1)]
+    )
 
     # test complex cepstrum
-    ratcep = ccep_zt(x, cepsize)
-    dftcep = ccep_dft(x, cepsize)
-    assert np.allclose(cepref, ratcep[cepsize-1:])
-    assert np.allclose(cepref, dftcep[cepsize-1:])
+    ccep1 = ccep_zt(x, cepsize)
+    ccep2 = ccep_dft(x, cepsize)
+    assert np.allclose(cepref, ccep1)
+    assert np.allclose(cepref, ccep2, atol=1e-6)
 
     # test real cepstrum
-    cepref /= 2  # complex cepstrum is right-sided
+    cepref = .5*(cepref + cepref[::-1])[cepsize-1:]
     rcep1 = rcep_zt(x, cepsize)
     rcep2 = rcep_dft(x, cepsize)
-    rcep3 = ccep_zt(x, cepsize)
-    rcep3 = .5*(rcep3 + rcep3[::-1])[cepsize-1:]
     assert np.allclose(cepref, rcep1)
     assert np.allclose(cepref, rcep2)
-    assert np.allclose(cepref, rcep3)
 
 
 def test_rceps():
@@ -54,4 +55,4 @@ def test_rceps():
 
 if __name__ == "__main__":
     test_rceps()
-    test_ceps()
+    test_cceps()

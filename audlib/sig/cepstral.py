@@ -3,7 +3,7 @@ from functools import reduce
 import warnings
 
 import numpy as np
-from numpy.fft import rfft, irfft
+from numpy.fft import rfft, irfft, fft, ifft
 
 from .spectral import magphase, logmag
 
@@ -124,7 +124,7 @@ def ccep_zt(sig, n):
 
     """
     assert sig[0] != 0, "Leading zero!"
-    cep = np.empty(2*n-1)
+    cep = np.zeros(2*n-1)
     (rminc, rminr), (rmaxc, rmaxr), gain = roots(sig)
     if rmaxc.size > 0:
         for jj, ii in enumerate(range(-n+1, 0)):
@@ -168,10 +168,9 @@ def ccep_dft(sig, n, nfft=4096, floor=-80.):
     """
     warnings.warn("Unstable implementation. Use ccep_zt instead.")
     assert n <= nfft//2, "Consider larger nfft!"
-    spec = rfft(sig, n=nfft)
-    cep = irfft(clog(spec, floor=floor), n=nfft)[:2*n-1]
-    cep = np.roll(cep, n-1)
-    return cep
+    spec = rfft(sig, nfft)
+    cep = irfft(clog(spec, floor), nfft)
+    return np.concatenate((cep[-(n-1):], cep[:n]))
 
 
 def rcep_zt(sig, n):
@@ -197,8 +196,8 @@ def rcep_zt(sig, n):
 
     """
     ccep = ccep_zt(sig, n)
-    rcep = .5*(ccep+ccep[::-1])
-    return rcep[n-1:]  # only keep non-negative quefrency
+    rcep = .5*(ccep[n-1:]+ccep[n-1::-1])  # only keep non-negative quefrency
+    return rcep
 
 
 def rcep_dft(sig, n, nfft=4096, floor=-80.):
@@ -223,5 +222,4 @@ def rcep_dft(sig, n, nfft=4096, floor=-80.):
     cep: 1-D ndarray
 
     """
-    rcep = irfft(logmag(rfft(sig, nfft), floor), nfft)
-    return rcep[:n]
+    return irfft(logmag(rfft(sig, nfft), floor), nfft)[:n]
