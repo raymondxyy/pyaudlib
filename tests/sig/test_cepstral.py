@@ -5,7 +5,7 @@ from audlib.quickstart import welcome
 from audlib.sig.cepstral import rcep_zt, rcep_dft, ccep_zt, ccep_dft
 
 
-def test_cceps():
+def test_ceps_echo():
     """Test complex cepstrum function using the impulse response of an echo.
 
     Taken from example 8.3 of RS, page 414.
@@ -50,9 +50,20 @@ def test_rceps():
     rcep1 = rcep_zt(eesig, nceps)
     rcep2 = rcep_dft(eesig, nceps)
     # Give a relatively high tolerance because of time-aliasing
-    assert np.allclose(((rcep1-rcep2)**2).mean(), [0], atol=1e-6)
+    assert np.allclose(rcep2-rcep1, 0, atol=1e-2)
+
+
+def test_cceps():
+    """Test audlib.sig.cepstral.ccep*"""
+    sig, _ = welcome()
+    eesig = sig[8466:8466+512]
+    nceps = 200
+    ccep1 = ccep_zt(eesig, nceps)
+    ccep2 = ccep_dft(eesig, nceps)
+    assert np.allclose(ccep2-ccep1, 0, atol=1e-2)
 
 
 if __name__ == "__main__":
     test_rceps()
     test_cceps()
+    test_ceps_echo()

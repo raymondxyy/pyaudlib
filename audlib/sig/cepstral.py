@@ -1,16 +1,15 @@
 """Functions for CEPSTRAL processing."""
 from functools import reduce
-import warnings
 
 import numpy as np
-from numpy.fft import rfft, irfft, fft, ifft
+from numpy.fft import rfft, irfft
 
 from .spectral import magphase, logmag
 
 
 def clog(cspec, floor=-80.):
     r"""Complex logarithm defined as log(X) = log(|X|)+j\angle(X).
-    
+
     Parameters
     ----------
     cspec: numpy.ndarray
@@ -24,6 +23,35 @@ def clog(cspec, floor=-80.):
     """
     mag, phs = magphase(cspec, unwrap=True)
     return logmag(mag, floor) + 1j*phs
+
+
+def unwrap(zmaxp, zminp, n):
+    """Calculate the unwrapped phase from zero locations.
+
+    This implementation follows RS Eq. 8.73.
+
+    Parameters
+    ----------
+    zmaxp: numpy.ndarray
+        Zero locations outside the unit circle.
+    zminp: numpy.ndarray
+        Zero locations inside the unit circle.
+    n: int
+        DFT points.
+
+    Returns
+    -------
+    Non-negative frequency phase spectrum in range [0, n//2+1).
+
+    """
+    minphase = np.angle(
+        1 - zminp[:, None]*np.exp(-1j*2*np.pi*np.arange(n//2+1)/n)
+    ).sum(axis=0)
+    maxphase = np.angle(
+        1 - 1/zmaxp[:, None]*np.exp(1j*2*np.pi*np.arange(n//2+1)/n)
+    ).sum(axis=0)
+
+    return minphase + maxphase
 
 
 def crroots(roots):
@@ -159,6 +187,10 @@ def ccep_dft(sig, n, nfft=4096, floor=-80.):
         Number of DFT points. Recommended to be large to alleviate time aliasing.
     floor: float, -80.
         log-magnitude floor in dB. Default to -80.
+    compphase: bool, True.
+        Compensate linear phase term by finding the number of roots of the
+        polynomial representing the z transform of the signal that are outside
+        the unit circle (maximum-phase zeros).
 
     Returns
     -------
@@ -166,10 +198,12 @@ def ccep_dft(sig, n, nfft=4096, floor=-80.):
         complex ceptrum of length `2n-1`; quefrency index (-n, n).
 
     """
-    warnings.warn("Unstable implementation. Use ccep_zt instead.")
     assert n <= nfft//2, "Consider larger nfft!"
     spec = rfft(sig, nfft)
-    cep = irfft(clog(spec, floor), nfft)
+    (rminc, rminr), (rmaxc, rmaxr), _ = roots(sig)
+    zmaxp = np.concatenate((rmaxc, rmaxc.conj(), rmaxr))
+    zminp = np.concatenate((rminc, rminc.conj(), rminr))
+    cep = irfft(logmag(spec, floor)+1j*unwrap(zmaxp, zminp, nfft), nfft)
     return np.concatenate((cep[-(n-1):], cep[:n]))
 
 
