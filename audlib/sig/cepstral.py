@@ -25,8 +25,11 @@ def clog(cspec, floor=-80.):
     return logmag(mag, floor) + 1j*phs
 
 
-def unwrap(zmaxp, zminp, n):
+def unwrap(czeros, rzeros, n):
     """Calculate the unwrapped phase from zero locations.
+
+    NOTE: Each complex zero is assumed to implicitly represent a pair of
+    zeros in complex conjugate pairs.
 
     This implementation follows RS Eq. 8.73.
 
@@ -44,35 +47,30 @@ def unwrap(zmaxp, zminp, n):
     Non-negative frequency phase spectrum in range [0, n//2+1).
 
     """
-    minphase = np.angle(
-        1 - zminp[:, None]*np.exp(-1j*2*np.pi*np.arange(n//2+1)/n)
-    ).sum(axis=0)
-    maxphase = np.angle(
-        1 - 1/zmaxp[:, None]*np.exp(1j*2*np.pi*np.arange(n//2+1)/n)
-    ).sum(axis=0)
+    cmags, cphases = czeros
+    phase = np.zeros(n//2+1)
+    minp = cmags < 1
+    for mm, pp in zip(cmags[minp], cphases[minp]):  # minimum-phase
+        # (1-az-1)(1-a*z-1) = 1 - 2|a|cos(pp)z-1 + |a|^2 z-2
+        phase += np.angle(rfft([1, -2*mm*np.cos(pp*np.pi), mm**2], n))
+    for mm, pp in zip(cmags[~minp], cphases[~minp]):  # maximum-phase
+        # (1-bz)(1-b*z) = 1 - 2|b|*cos(pp)z + |b|^2 z^2
+        ss = np.zeros(n)
+        ss[0], ss[-1], ss[-2] = 1, -2/mm*np.cos(pp*np.pi), mm**-2
+        phase += np.angle(rfft(ss, n))
+    minp = np.abs(rzeros) < 1
+    for rr in rzeros[minp]:  # minimum-phase
+        phase += np.angle(rfft([1, -rr], n))
+    for rr in rzeros[~minp]:  # maximum-phase
+        ss = np.zeros(n)
+        ss[0], ss[-1] = 1, -1/rr
+        phase += np.angle(rfft(ss, n))
 
-    return minphase + maxphase
+    return phase
 
-
-def crroots(roots):
-    """Convert an iterable of roots to an iterable of complex conjugate pairs.
-
-    Parameters
-    ----------
-    roots: iterable
-        Assume this is returned from numpy.roots. Conjugate pairs must be adjacent.
-
-    Returns
-    -------
-    root, pair: numpy.complex, bool
-        One complex root and if there is a conjugate pair.
-    """
-    rreal = roots.imag == 0
-    assert sum(~rreal) % 2 == 0
-    return roots[~rreal][::2], roots[rreal].real
 
 def roots(sig):
-    """Find the roots of a finite-duration signal.
+    """Find the roots of a finite-duration real signal.
 
     Keyword Parameters
     ------------------
@@ -89,17 +87,19 @@ def roots(sig):
         Conjugate pair of each complex root is ignore.
     gain: float
         sig[0]
+
     """
     x0 = sig[0]
     roots = np.roots(sig/x0)
-    rmag = np.abs(roots)
-    assert 1 not in rmag
-    rminc, rminr = crroots(roots[rmag < 1])
-    rmaxc, rmaxr = crroots(roots[rmag > 1])
+    mr = roots.imag == 0  # real roots
+    assert sum(~mr) % 2 == 0
+    cr, rr = roots[~mr][::2], roots[mr].real
+    rmaxc, rmaxr = cr[np.abs(cr) > 1], rr[np.abs(rr) > 1]
     gain = x0 * np.prod(rmaxr) * np.prod([(r.real**2+r.imag**2) for r in rmaxc])
     if len(rmaxr) % 2:  # odd number of zeros outside UC
         gain = -gain
-    return (rminc, rminr), (rmaxc, rmaxr), gain
+
+    return (np.abs(cr), np.angle(cr)/np.pi), rr, gain
 
 
 def conjpoly(czeros, rzeros):
@@ -152,23 +152,8 @@ def ccep_zt(sig, n):
 
     """
     assert sig[0] != 0, "Leading zero!"
-    cep = np.zeros(2*n-1)
-    (rminc, rminr), (rmaxc, rmaxr), gain = roots(sig)
-    if rmaxc.size > 0:
-        for jj, ii in enumerate(range(-n+1, 0)):
-            cep[jj] = np.sum(np.abs(rmaxc)**ii*2*np.cos(ii*np.angle(rmaxc)))/ii
-    if rmaxr.size > 0:
-        for jj, ii in enumerate(range(-n+1, 0)):
-            cep[jj] += np.sum(rmaxr**ii)/ii
-    cep[n-1] = np.log(np.abs(gain))
-    if rminc.size > 0:
-        for jj, ii in enumerate(range(1, n)):
-            cep[n+jj] = -np.sum(np.abs(rminc)**ii*2*np.cos(ii*np.angle(rminc)))/ii
-    if rminr.size > 0:
-        for jj, ii in enumerate(range(1, n)):
-            cep[n+jj] -= np.sum(rminr**ii)/ii
-
-    return cep
+    czeros, rzeros, gain = roots(sig)
+    return z2ccep(czeros, rzeros, gain, n)
 
 
 def ccep_dft(sig, n, nfft=4096, floor=-80.):
@@ -200,10 +185,8 @@ def ccep_dft(sig, n, nfft=4096, floor=-80.):
     """
     assert n <= nfft//2, "Consider larger nfft!"
     spec = rfft(sig, nfft)
-    (rminc, rminr), (rmaxc, rmaxr), _ = roots(sig)
-    zmaxp = np.concatenate((rmaxc, rmaxc.conj(), rmaxr))
-    zminp = np.concatenate((rminc, rminc.conj(), rminr))
-    cep = irfft(logmag(spec, floor)+1j*unwrap(zmaxp, zminp, nfft), nfft)
+    czeros, rzeros, _ = roots(sig)
+    cep = irfft(logmag(spec, floor)+1j*unwrap(czeros, rzeros, nfft), nfft)
     return np.concatenate((cep[-(n-1):], cep[:n]))
 
 
@@ -257,3 +240,72 @@ def rcep_dft(sig, n, nfft=4096, floor=-80.):
 
     """
     return irfft(logmag(rfft(sig, nfft), floor), nfft)[:n]
+
+
+def z2ccep(czeros, rzeros, gain, n):
+    """Convert zero locations to complex cepstrum.
+
+    Parameters
+    ----------
+    zeros: iterable
+        Zeros locations in an array of amplitude,phase pair.
+        NOTE: complex zeros are assumed to appear in conjugate pairs, so only
+        one zero of each pair should be passed in.
+    n: int
+        Index range (-n, n) in which complex cepstrum will be evaluated.
+
+    """
+    cep = np.zeros(2*n-1)
+    cmags, cphases = czeros
+    cmax = cmags > 1 # maxphase complex zeros
+    if cmax.sum() > 0:
+        rr, pp = cmags[cmax], cphases[cmax]
+        for jj, ii in enumerate(range(-n+1, 0)):
+            cep[jj] = np.sum(rr**ii*2*np.cos(ii*pp*np.pi))/ii
+    rmax = rzeros > 1  # maxphase real zeros
+    if rmax.sum() > 0:
+        for jj, ii in enumerate(range(-n+1, 0)):
+            cep[jj] += np.sum(rzeros[rmax]**ii)/ii
+    cep[n-1] = np.log(np.abs(gain))
+    if (~cmax).sum() > 0:  # minphase complex zeros
+        rr, pp = cmags[~cmax], cphases[~cmax]
+        for jj, ii in enumerate(range(1, n)):
+            cep[n+jj] = -np.sum(rr**ii*2*np.cos(ii*pp*np.pi))/ii
+    if (~rmax).sum() > 0:  # minphase real zeros
+        for jj, ii in enumerate(range(1, n)):
+            cep[n+jj] -= np.sum(rzeros[~rmax]**ii)/ii
+
+    return cep
+
+
+def p2ccep(cpoles, rpoles, gain, n):
+    """Convert pole locations to complex cepstrum.
+
+    Parameters
+    ----------
+    poles: array_like
+        Zeros locations in an array.
+        NOTE: complex zeros are assumed to appear in conjugate pairs, so only
+        one zero of each pair should be passed in.
+    n: int
+        Index range (-n, n) in which complex cepstrum will be evaluated.
+
+    """
+    cep = np.zeros(n)
+    cep[0] = np.log(np.abs(gain))
+    cmags, cphases = cpoles
+    if len(cmags) > 0:  # minimum-phase complex poles
+        for ii in range(1, n):
+            cep[ii] = np.sum(cmags**ii*2*np.cos(ii*np.pi*cphases))/ii
+    if len(rpoles) > 0:  # minimum-phase real poles
+        for ii in range(1, n):
+            cep[ii] += np.sum(rpoles**ii)/ii
+
+    return cep
+
+
+def zp2ccep(czeros, rzeros, cpoles, rpoles, gain, n):
+    """Convert zero and pole locations to complex cepstrum."""
+    cep = z2ccep(czeros, rzeros, gain, n)
+    cep[n-1:] = cep[n-1:] + p2ccep(cpoles, rpoles, 1, n)
+    return cep
