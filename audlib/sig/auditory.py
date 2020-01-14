@@ -128,7 +128,7 @@ ERB_ORDER = 1
 # Thanks to Alain de Cheveigne' for his suggestions and improvements.
 def erb_fbank(sig, A0, A11, A12, A13, A14, A2, B0, B1, B2, gain, cascade=True):
     """Filter a signal using ERB filterbanks."""
-    if cascade:
+    if cascade:  # original implementation. Might be numerically more stable.
         y1 = signal.lfilter([A0/gain, A11/gain, A2/gain], [B0, B1, B2], sig)
         y2 = signal.lfilter([A0, A12, A2], [B0, B1, B2], y1)
         y3 = signal.lfilter([A0, A13, A2], [B0, B1, B2], y2)
@@ -146,8 +146,8 @@ def erb_freqz(A0, A11, A12, A13, A14, A2, B0, B1, B2, gain, nfft):
     """Compute frequency reponse given one ERB filter parameters."""
     ww, h1 = freqz([A0/gain, A11/gain, A2/gain], [B0, B1, B2], nfft)
     _, h2 = freqz([A0, A12, A2], [B0, B1, B2], nfft)
-    __, h3 = freqz([A0, A13, A2], [B0, B1, B2], nfft)
-    ___, h4 = freqz([A0, A14, A2], [B0, B1, B2], nfft)
+    _, h3 = freqz([A0, A13, A2], [B0, B1, B2], nfft)
+    _, h4 = freqz([A0, A14, A2], [B0, B1, B2], nfft)
     return ww, h1*h2*h3*h4
 
 

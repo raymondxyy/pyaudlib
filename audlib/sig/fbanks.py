@@ -264,7 +264,7 @@ class Gammatone(Filterbank):
 
         return ww, hh
 
-    def filter(self, sig, k, cascade=False):
+    def filter(self, sig, k, cascade=True):
         """Filter signal with k-th channel."""
         return erb_fbank(sig, *self.filters[k], cascade=cascade)
 
