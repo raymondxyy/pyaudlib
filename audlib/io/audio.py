@@ -1,5 +1,5 @@
 """Some functions to deal with I/O of different audio file formats."""
-
+import sys
 from random import randrange
 import soundfile as sf
 from resampy import resample
@@ -7,7 +7,6 @@ import numpy as np
 import os
 import subprocess
 import io
-import subprocess
 import platform
 
 
@@ -35,8 +34,9 @@ if not os.path.exists(_sph2pipe):
     try:
         subprocess.check_output(['gcc', '--version'])
     except OSError:
-        print('gcc is not installed on your system or it is not in PATH. Please, make sure gcc is accessible through PATH.', file=sys.stderr)
-    
+        print('''gcc is not installed on your system or it is not in PATH.
+    Please, make sure gcc is accessible through PATH.''', file=sys.stderr)
+
     file_dir = os.path.dirname(os.path.realpath(__file__))
     build_dir = os.path.join(file_dir, '..', 'tools', 'sph2pipe')
     with WorkingDirectory(build_dir):
@@ -177,17 +177,49 @@ def audioread(path, sr=None, start=0, stop=None, force_mono=False,
             x /= np.max(np.abs(x))
         return x, xsr
     else:  # multi-channel
-        x = x.T
         if sr and (xsr != sr):
-            x = resample(x, xsr, sr, axis=1)
+            x = resample(x, xsr, sr, axis=0)
             xsr = sr
         if force_mono:
-            x = x.sum(axis=0)/x.shape[0]
+            x = x.sum(axis=1)/x.shape[1]
         if norm:
-            for chan in range(x.shape[0]):
-                x[chan, :] /= np.max(np.abs(x[chan, :]))
+            x = x / np.abs(x).max(axis=0)
 
         return x, xsr
+
+
+def audiogen(path, framesize, hopsize, start=0, stop=None, force_mono=False,
+             norm=False):
+    """Similar to audioread, but return a generator instead.
+
+    Current version pads zeros in the end.
+
+    Parameters
+    ----------
+    path: str
+        Path to an audio file.
+    framesize: int
+        Size of each yielded frame.
+    hop: int or float
+        Hop size in terms of number of samples or percentage.
+
+    See Also
+    --------
+    audioread
+
+    """
+    def _procframe(frame):
+        if force_mono and (frame.shape[1] > 1):
+            frame = frame.sum(axis=1)/frame.shape[1]
+        if norm:
+            frame = frame / np.abs(frame).max(axis=0)
+        return frame
+
+    for frame in sf.blocks(path, blocksize=framesize,
+                           overlap=int(framesize-hopsize),
+                           start=start, stop=stop,
+                           fill_value=0.):
+        yield _procframe(frame)
 
 
 def audiowrite(data, sr, outpath, norm=True):
