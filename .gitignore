@@ -9,6 +9,11 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Docs
+_build/
+_templates/
+_static/
+
 # C extensions
 *.so
 
