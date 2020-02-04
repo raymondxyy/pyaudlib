@@ -1,6 +1,7 @@
 # audlib
 
 [![Build Status](https://travis-ci.com/raymondxyy/pyaudlib.svg?token=xNuzdfgseSXz1yHDnh9L&branch=master)](https://travis-ci.org/raymondxyy/pyaudlib)
+![Coverage Status](coverage.svg)
 
 > A speech signal processing library in Python with emphasis on deep learning.
 
