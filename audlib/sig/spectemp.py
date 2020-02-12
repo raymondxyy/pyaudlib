@@ -195,7 +195,7 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
         np.outer(np.conj(hirt_), hirs_).real
 
 
-def modspec(sig, sr, fr, fbank, norm=True):
+def modspec(sig, sr, fr, fbank):
     """Modulation spectrogram proposed by Kingsbury et al.
 
     Implemented Kingsbury, Brian ED, Nelson Morgan, and Steven Greenberg.
