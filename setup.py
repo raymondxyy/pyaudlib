@@ -42,7 +42,6 @@ setup(
         'soundfile >= 0.10.2',
         'scipy >= 1.3.1',
         'resampy >= 0.2.2',
-        'matplotlib >= 3.1.1',
     ],
     extras_require={
         'tests': [
@@ -51,6 +50,9 @@ setup(
         'nn': [
             'torch >= 1.2.0',
             'torchvision >= 0.4.0',
+        ],
+        'display': [
+            'matplotlib >= 3.1.1',
         ],
     },
 )
