@@ -195,7 +195,7 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
         np.outer(np.conj(hirt_), hirs_).real
 
 
-def modspec(sig, sr, fr, fbank):
+def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod):
     """Modulation spectrogram proposed by Kingsbury et al.
 
     Implemented Kingsbury, Brian ED, Nelson Morgan, and Steven Greenberg.
@@ -211,17 +211,15 @@ def modspec(sig, sr, fr, fbank):
     fbank: fbank.Filterbank
         A Filterbank object. .filter() must be implemented.
     """
-    if sr != 16000:
-        raise NotImplementedError("Not supported.")
-    lpenv = signal.firwin(501, 28/sr*2, window='blackman')  # Low-pass envelope extractor
-    bpmod = signal.firwin(25, 4/fr*2, window='hamming')  # Band-pass modulation detector
-    bpmod = bpmod * np.exp(1j*2*np.pi*4/fr * np.arange(len(bpmod)))
+    assert len(lpf_mod) % 2, "Modulation filter must have odd number of samples."
+    ss = len(lpf_mod) // 2
+    bpf_mod = lpf_mod * np.exp(1j*2*np.pi*4/fr * np.arange(-ss, ss+1))
     deci = sr // fr
     nframes = int(math.ceil(len(sig)/deci))
     pspec = np.empty((nframes, len(fbank)))
     for kk, _ in enumerate(fbank):
-        banddn = convdn(fbank.filter(sig, kk).clip(0), lpenv, deci, True)[:nframes]
-        banddn = signal.lfilter(bpmod, [1], banddn - banddn.mean())
+        banddn = convdn(fbank.filter(sig, kk).clip(0), lpf_env, deci, True)[:nframes]
+        banddn = conv(banddn, bpf_mod, True)[:nframes]
         pspec[:, kk] = banddn.real**2 + banddn.imag**2
 
     return pspec
