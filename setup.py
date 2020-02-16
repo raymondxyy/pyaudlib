@@ -46,6 +46,7 @@ setup(
     extras_require={
         'tests': [
             'pytest >= 5.1.3',
+            'coverage >= 5.0.3'
         ],
         'nn': [
             'torch >= 1.2.0',
