@@ -42,15 +42,19 @@ setup(
         'soundfile >= 0.10.2',
         'scipy >= 1.3.1',
         'resampy >= 0.2.2',
-        'matplotlib >= 3.1.1',
-        'torch >= 1.2.0',
-        'torchvision >= 0.4.0',
     ],
     extras_require={
         'tests': [
             'pytest >= 5.1.3',
             'pytest-cov >= 2.8.1',
             'codecov >= 2.0.15',
+        ],
+        'nn': [
+            'torch >= 1.2.0',
+            'torchvision >= 0.4.0',
+        ],
+        'display': [
+            'matplotlib >= 3.1.1',
         ],
     },
 )

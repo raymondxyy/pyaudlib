@@ -62,5 +62,5 @@ def test_invpnspec():
 
 
 if __name__ == "__main__":
-    #test_strf()
+    test_strf()
     test_invpnspec()

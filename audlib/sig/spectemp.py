@@ -1,9 +1,14 @@
+# coding: utf-8
+
 """SPECtral-TEMPoral models for audio signals."""
+import math
+
 import numpy as np
-from scipy.signal import hilbert, lfilter
 from scipy.fftpack import dct, idct
+import scipy.signal as signal
 
 from .util import asymfilt, nextpow2
+from .temporal import convdn, conv
 
 
 def pncc(powerspec, medtime=2, medfreq=4, synth=False,
@@ -76,7 +81,7 @@ def pncc(powerspec, medtime=2, medfreq=4, synth=False,
 
     # F. Mean power normalization
     meanpower = out.mean(axis=1)  # T[m]
-    mu, _ = lfilter([1-lambda_mu], [1, -lambda_mu], meanpower,
+    mu, _ = signal.lfilter([1-lambda_mu], [1, -lambda_mu], meanpower,
                     zi=[meanpower.mean()])
 
     if synth:  # return mask only
@@ -156,7 +161,7 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
     theta: float
         Orientation of time evolution in radians.
 
-    """    
+    """
     def _hs(x, scale):
         """Construct a 1-D spectral impulse response with a 2-diff Gaussian.
 
@@ -180,11 +185,41 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
         ndft = max(512, nextpow2(max(len(hs), len(ht))))
         ndft = max(len(hs), len(ht))
     assert ndft >= max(len(ht), len(hs))
-    hsa = hilbert(hs, ndft)[:len(hs)]
-    hta = hilbert(ht, ndft)[:len(ht)]
+    hsa = signal.hilbert(hs, ndft)[:len(hs)]
+    hta = signal.hilbert(ht, ndft)[:len(ht)]
     hirs = hs * np.cos(phi) + hsa.imag * np.sin(phi)
     hirt = ht * np.cos(theta) + hta.imag * np.sin(theta)
-    hirs_ = hilbert(hirs, ndft)[:len(hs)]
-    hirt_ = hilbert(hirt, ndft)[:len(ht)]
+    hirs_ = signal.hilbert(hirs, ndft)[:len(hs)]
+    hirt_ = signal.hilbert(hirt, ndft)[:len(ht)]
     return np.outer(hirt_, hirs_).real,\
         np.outer(np.conj(hirt_), hirs_).real
+
+
+def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod):
+    """Modulation spectrogram proposed by Kingsbury et al.
+
+    Implemented Kingsbury, Brian ED, Nelson Morgan, and Steven Greenberg.
+    "Robust speech recognition using the modulation spectrogram."
+    Speech communication 25.1-3 (1998): 117-132.
+
+    Parameters
+    ----------
+    sig: numpy.ndarray
+        Time-domain signal to be processed.
+    sr, fr: int
+        Sampling rate; Frame rate.
+    fbank: fbank.Filterbank
+        A Filterbank object. .filter() must be implemented.
+    """
+    assert len(lpf_mod) % 2, "Modulation filter must have odd number of samples."
+    ss = len(lpf_mod) // 2
+    bpf_mod = lpf_mod * np.exp(1j*2*np.pi*4/fr * np.arange(-ss, ss+1))
+    deci = sr // fr
+    nframes = int(math.ceil(len(sig)/deci))
+    pspec = np.empty((nframes, len(fbank)))
+    for kk, _ in enumerate(fbank):
+        banddn = convdn(fbank.filter(sig, kk).clip(0), lpf_env, deci, True)[:nframes]
+        banddn = conv(banddn, bpf_mod, True)[:nframes]
+        pspec[:, kk] = banddn.real**2 + banddn.imag**2
+
+    return pspec
