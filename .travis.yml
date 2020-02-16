@@ -9,6 +9,6 @@ script:
     - pytest --cov-report term --cov=audlib tests/
 env:
     - PYTHONPATH=`pwd`
-    - CODECOV_TOKEN=fillthisin
+    - CODECOV_TOKEN="dd757c20-296f-4e7f-bd4f-1ac7a098fea8"
 after_success:
     - codecov
