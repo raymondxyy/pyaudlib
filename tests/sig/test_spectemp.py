@@ -61,19 +61,6 @@ def test_invpnspec():
     return
 
 
-def test_modspec():
-    from audlib.sig.spectemp import modspec
-    #import matplotlib.pyplot as plt
-    #from audlib.plot import specgram
-    sig, sr = welcome()
-    gtbank = Gammatone(sr, 40)
-    mspec = modspec(sig, sr, 100, gtbank)
-    #fig, ax = plt.subplots()
-    #specgram(10*np.log10(mspec), ax)
-    #plt.show()
-
-
 if __name__ == "__main__":
-    #test_strf()
-    #test_invpnspec()
-    test_modspec()
+    test_strf()
+    test_invpnspec()

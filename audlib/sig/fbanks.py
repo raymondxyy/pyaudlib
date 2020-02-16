@@ -219,19 +219,22 @@ class Gammatone(Filterbank):
             for other frequencies.
             3. Iterable of center frequencies. This allows every center
             frequency to be defined by user.
+        reverse: bool, True
+           Index frequency in the reverse direction so that the default goes
+           from low to high.
 
         """
         super(Gammatone, self).__init__()
         self.sr = sr
         self.num_chan = num_chan
         if center_frequencies is None:
-            self.cf = erb_space(num_chan, 100., sr/2)
+            self.cf = erb_space(num_chan, 100., sr/2)[::-1]
         elif len(center_frequencies) == num_chan:
             self.cf = center_frequencies
         else:
             assert len(center_frequencies) == 2,\
                 "Fail to interpret center frequencies!"
-            self.cf = erb_space(num_chan, *center_frequencies)
+            self.cf = erb_space(num_chan, *center_frequencies)[::-1]
 
         self.filters = []
         for ii, cf in enumerate(self.cf):  # construct filter coefficients
