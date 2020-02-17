@@ -101,8 +101,10 @@ if __name__ == '__main__':
     if path is None:
         print("Specify WAV with export WAV=/path/to/audio.wav!")
         exit()
-    from audlib.io.audio import audioread
-    sig, _ = audioread(path, sr=SR)
+    from audlib.io.audio import audioread, audioinfo
+    info = audioinfo(path)
+    assert info.samplerate == SR, f"Supports {SR} Hz sampling rate only."
+    sig, _ = audioread(path)
 
     pitch_demo(sig)
 

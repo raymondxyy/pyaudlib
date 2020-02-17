@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """Dataset classes for LibriSpeech."""
 import os
 import random
@@ -58,7 +60,7 @@ class LibriSpeakers(SIDDataset):
         return (np.searchsorted(
             dur_accum, p) for p in np.cumsum(proportions)[:-1])
 
-    def __init__(self, root, splits=(1,), sr=None, filt=None, read=None,
+    def __init__(self, root, splits=(1,), filt=None, read=None,
                  transform=None, shuffle=False, seed=0):
         """Instantiate an audio dataset.
 
@@ -89,12 +91,9 @@ class LibriSpeakers(SIDDataset):
 
         """
         super(LibriSpeakers).__init__()
-        if sr:
-            assert sr == 16000, "LibriSpeech is sampled at 16kHz."
         assert 1 <= len(splits) <= 3 and sum(splits) == 1, "Invalid split!"
 
         self.root = root
-        self.samplerate = sr
         self._filepaths = lsfiles(
             root,
             filt=(lambda p: self.isflac(p) and filt(p)) if filt else self.isflac,
@@ -176,7 +175,7 @@ class LibriSpeakers(SIDDataset):
         sid = self._spkr_label[os.path.basename(path).split('-')[0]]
         if self.customread:
             return AudioSpeaker(*self.customread(path), speaker=sid)
-        return AudioSpeaker(*audioread(path, sr=self.samplerate), sid)
+        return AudioSpeaker(*audioread(path), sid)
 
     def __len__(self):
         """Return number of valid audio files."""

@@ -94,11 +94,15 @@ def open_cmd(path):
 @click.option('--mono/--no-mono', default=_cfg['force-mono'])
 @processor
 def read_cmd(files, sr, mono):
-    """Read audio files."""
+    """Read audio files.
+
+    TODO: Implement resample.
+    TODO: Implement mono.
+    """
     audioread = import_module('audlib.io.audio').audioread
     for ff in files:
         fpath = os.path.join(ff.root, ff.path)
-        ff.data = Audio(*audioread(fpath, sr=sr, force_mono=mono))
+        ff.data = Audio(*audioread(fpath))
         yield ff
 
 

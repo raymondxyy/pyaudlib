@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """Dataset derived from the ESC-50 dataset for audio event classification."""
 import os
 
@@ -59,8 +61,7 @@ class ESC50(AudioDataset):
 
         return categories
 
-    def __init__(self, root, categories=None, sr=None, filt=None,
-                 transform=None):
+    def __init__(self, root, categories=None, filt=None, transform=None):
         """Instantiate a ESC-50 dataset.
 
         Parameters
@@ -69,8 +70,6 @@ class ESC50(AudioDataset):
             Full path to root directory.
         categories: list of str, None
             Categories to take. Default takes all 50 categories.
-        sr: int, None
-            Sampling rate in Hz. Default to 44100.
         filt: callable, optional
             Filters to be applied on each audio path. Default to None.
         transform: callable(ESCAudio) -> ESCAudio
@@ -103,15 +102,14 @@ class ESC50(AudioDataset):
     def read(self, path):
         """Parse a path into fields, and read audio."""
         tar, cat = self.meta[os.path.basename(path)][1:3]
-        sig, ssr = audioread(os.path.join(self.root, path), self.sr)
+        sig, ssr = audioread(os.path.join(self.root, path))
 
         return ESCAudio(sig, ssr, tar, cat)
 
     def __repr__(self):
         """Representation of ESC-50."""
-        return r"""{}({}, sr={}, categories={})
-        """.format(self.__class__.__name__, self.root, self.sr,
-                   self.categories)
+        return r"""{}({}, categories={})
+        """.format(self.__class__.__name__, self.root, self.categories)
 
     def __str__(self):
         """Print out a summary of instantiated dataset."""

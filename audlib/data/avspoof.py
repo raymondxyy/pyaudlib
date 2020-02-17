@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """Dataset class for the AVspoof dataset."""
 from .dataset import AudioDataset, audioread
 from .datatype import Audio
@@ -94,15 +96,13 @@ class AVSpoof(AudioDataset):
     def isaudio(path):
         return path.endswith('.wav')
 
-    def __init__(self, root, sr=None, filt=None, read=None, transform=None):
+    def __init__(self, root, filt=None, read=None, transform=None):
         """Instantiate an AVSpoof dataset.
 
         Parameters
         ----------
         root: str
             The root directory of AVSpoof.
-        sr: int, optional
-            Sampling rate in Hz. AVSpoof is recorded at 16kHz.
         filt: callable, optional
             Filters to be applied on each audio path. Default to None.
         read: callable(str) -> (array_like, int), optional
@@ -124,7 +124,7 @@ class AVSpoof(AudioDataset):
         """
         def _read(path):
             if not read:
-                sig, ssr = audioread(path, sr=sr)
+                sig, ssr = audioread(path)
                 return SpoofedAudio(sig, ssr, attacktype=attack_type(path))
             else:
                 sig, ssr = read(path)

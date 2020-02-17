@@ -7,6 +7,7 @@ with some omissions and additions.
 import math
 import os
 import bisect
+import soundfile as sf
 
 from ..io.batch import lsfiles
 from ..io.audio import audioread, audioinfo
@@ -61,11 +62,11 @@ class AudioDataset(Dataset):
         return path.endswith(('.wav', '.flac', '.sph'))
 
     @staticmethod
-    def read(path, sr):
+    def read(path):
         """Read audio and put in an Audio object."""
-        return Audio(*audioread(path, sr=sr))
+        return Audio(*audioread(path))
 
-    def __init__(self, root, sr=None, filt=None, read=None, transform=None):
+    def __init__(self, root, filt=None, read=None, transform=None):
         """Instantiate an audio dataset.
 
         Parameters
@@ -92,7 +93,6 @@ class AudioDataset(Dataset):
         """
         super(AudioDataset).__init__()
         self.root = root
-        self.sr = sr
         self._filepaths = lsfiles(root, filt=filt if filt else self.isaudio,
                                   relpath=True)
         self.customread = read
@@ -114,7 +114,7 @@ class AudioDataset(Dataset):
                 os.path.join(self.root, self._filepaths[idx]))
         else:
             sample = self.read(
-                os.path.join(self.root, self._filepaths[idx]), self.sr)
+                os.path.join(self.root, self._filepaths[idx]))
 
         if self.transform:
             sample = self.transform(sample)
@@ -146,7 +146,7 @@ class LongFile(Dataset):
     def __getitem__(self, idx):  #  TODO: move zero-padding here after changing audioread
         idx %= len(self)
         ns = idx*self.segshift
-        return Audio(*audioread(self.path, frames=self.seglength, start=ns))
+        return Audio(*sf.read(self.path, frames=self.seglength, start=ns))
 
     def __len__(self):
         return math.ceil(
@@ -156,7 +156,7 @@ class LongFile(Dataset):
 class LstDataset(Dataset):
     """A dataset that gets all audio files from a list of file paths."""
 
-    def __init__(self, lst, root=None, sr=None, read=None, transform=None):
+    def __init__(self, lst, root=None, read=None, transform=None):
         """Instantiate an audio dataset.
 False
         Parameters
@@ -185,7 +185,6 @@ False
         """
         super(LstDataset).__init__()
         self.root = root
-        self.samplerate = sr
         if isinstance(lst, list):
             self._filepaths = lst
         elif isinstance(lst, str):
@@ -204,7 +203,7 @@ False
         """Read a single file from path."""
         if self.customread:
             return self.customread(path)
-        return Audio(*audioread(path, sr=self.samplerate))
+        return Audio(*audioread(path))
 
     def __len__(self):
         """Return number of valid audio files."""
