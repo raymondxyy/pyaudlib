@@ -7,7 +7,6 @@ with some omissions and additions.
 import math
 import os
 import bisect
-import soundfile as sf
 
 from ..io.batch import lsfiles
 from ..io.audio import audioread, audioinfo
@@ -143,10 +142,11 @@ class LongFile(Dataset):
         assert self.segshift > 1, "Insufficient segshift!"
         self.seglength = int(seglength*sr)
 
-    def __getitem__(self, idx):  #  TODO: move zero-padding here after changing audioread
+    def __getitem__(self, idx):
         idx %= len(self)
         ns = idx*self.segshift
-        return Audio(*sf.read(self.path, frames=self.seglength, start=ns))
+        return Audio(*audioread(self.path, frames=self.seglength,
+                                start=ns, fill_value=0))
 
     def __len__(self):
         return math.ceil(
