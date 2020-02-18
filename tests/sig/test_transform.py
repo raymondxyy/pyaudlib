@@ -1,11 +1,11 @@
 import numpy as np
 
 from audlib.sig.transform import stft, istft
-from audlib.io.audio import audioread
 from audlib.sig.window import hamming
 from audlib.sig.util import nextpow2
+from audlib.quickstart import welcome
 
-WELCOME, SR = audioread('samples/welcome16k.wav')
+WELCOME, SR = welcome()
 
 
 def test_stft():

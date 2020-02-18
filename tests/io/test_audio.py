@@ -1,10 +1,10 @@
 """Test suite for audio I/O."""
 import os
 
+import audlib
 from audlib.io.audio import audioread
 
-HOME = os.path.abspath(os.path.dirname(os.path.abspath(__file__))+"../../../")
-
+HOME = os.path.dirname(audlib.__file__)
 
 def test_audioread():
     """Test audioread."""
