@@ -3,10 +3,11 @@ import numpy as np
 from scipy.signal import hilbert, lfilter
 from scipy.fftpack import dct, idct
 
+from .fbanks import Gammatone
 from .util import asymfilt
 
 
-def ssf(powerspec, lambda_lp, c0=.01, ptype=2):
+def ssf(powerspec, lambda_lp, c0=.01, ptype=2, gbank=None, nfft=None):
     """Suppression of Slowly-varying components and the Falling edge.
 
     This implementation follows paper by Kim and Stern:
@@ -17,7 +18,8 @@ def ssf(powerspec, lambda_lp, c0=.01, ptype=2):
     Parameters
     ----------
     powerspec: numpy.ndarray
-        Short-time power spectra (potentially frequency-integrated).
+        Short-time power spectra. N.B.: This input power spectrum is not 
+        frequency integrated
     lambda_lp: float
         Time constant to be used as the first-order lowpass filter coefficient.
 
@@ -27,19 +29,46 @@ def ssf(powerspec, lambda_lp, c0=.01, ptype=2):
         Power floor constant.
     ptype: int, 2
         SSF processing type; either 1 or 2.
+    gbank: Gammatone Filterbank, None
+        The gammatone filter bank to smooth the power spectrum (see: fbank.Gammatone)
+    nfft: int, None
+        The number of frequency channels used to compute the signal's power spectrum.
+
+    Returns
+    -------
+    out: numpy.ndarray
+        If gbank is not specified, this function outputs the ratio
+        of processed power to original power (i.e., Eq. (6) in Kim, et al.).
+        If gbank is specified, this function outputs the reconstructed
+        spectrum (i.e., Eq. (9) in Kim, et al.).
 
     """
+    power_spectrum = powerspec
+
+    if gbank is not None:
+        assert nfft is not None, 'In order to use Gammatone smoothing, you must specify nfft.'        
+        H = gbank.gammawgt(nfft)
+        power_spectrum = np.square(np.abs(power_spectrum @ H))
+
     # Low-pass filtered power
-    mspec = lfilter([1-lambda_lp], [1, -lambda_lp], powerspec, axis=0)
+    mspec = lfilter([1-lambda_lp], [1, -lambda_lp], power_spectrum, axis=0)
 
     if ptype == 1:
-        ptilde = np.maximum(powerspec-mspec, c0*powerspec)
+        ptilde = np.maximum(power_spectrum-mspec, c0*power_spectrum)
     elif ptype == 2:
-        ptilde = np.maximum(powerspec-mspec, c0*mspec)
+        ptilde = np.maximum(power_spectrum-mspec, c0*mspec)
     else:
         raise ValueError(f"Invalid ptype: [{ptype}]")
 
-    return ptilde / powerspec
+    w = ptilde / power_spectrum
+    out = w
+
+    if gbank is not None:
+        H = gbank.gammawgt(nfft)
+        mu = (w @ np.abs(H).T) / np.sum(np.abs(H), axis=1)
+        out = np.multiply(powerspec, mu)
+    
+    return out
 
 
 def pncc(powerspec, medtime=2, medfreq=4, synth=False,
