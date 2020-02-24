@@ -195,7 +195,7 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
         np.outer(np.conj(hirt_), hirs_).real
 
 
-def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod):
+def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod, original=False):
     """Modulation spectrogram proposed by Kingsbury et al.
 
     Implemented Kingsbury, Brian ED, Nelson Morgan, and Steven Greenberg.
@@ -217,9 +217,17 @@ def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod):
     deci = sr // fr
     nframes = int(math.ceil(len(sig)/deci))
     pspec = np.empty((nframes, len(fbank)))
+    if original:
+        pspec_orig = np.empty_like(pspec)
     for kk, _ in enumerate(fbank):
-        banddn = convdn(fbank.filter(sig, kk).clip(0), lpf_env, deci, True)[:nframes]
+        band = fbank.filter(sig, kk)
+        if original:
+            pspec_orig[:, kk] = band[::deci][:nframes]**2
+        banddn = convdn(band.clip(0), lpf_env, deci, True)[:nframes]
         banddn = conv(banddn, bpf_mod, True)[:nframes]
         pspec[:, kk] = banddn.real**2 + banddn.imag**2
+
+    if original:
+        return pspec, pspec_orig
 
     return pspec
