@@ -71,36 +71,30 @@ class SSFEnhancer(object):
             SSF type. Default to 2.
 
         """
+        gbank = Gammatone(sr, num_chan, (130., 4500.))
+
         def _stft(sig):
             return stft(sig, sr, wind, hop, nfft, synth=True, zphase=True)
 
-        def _istft(spec):
-            return istft(spec, sr, wind, hop, nfft, zphase=True)
+        def _ssf(sigspec):
+            return ssf(sigspec, .4*16000/sr, c0=c0, ptype=ptype, gbank=gbank, nfft=nfft)
 
-        def _ssf(pspec):
-            return ssf(pspec, .4*16000/sr, c0=c0, ptype=ptype)
-
-        self._stft = _stft
-        self._istft = _istft
         self._ssf = _ssf
-        self.freqwgts = Gammatone(sr, num_chan, (130., 4500.)).gammawgt(
-            nfft, squared=False)
-        wgtpow = np.sqrt((self.freqwgts ** 2).sum(axis=0))
-        self.freqwgts /= (wgtpow / wgtpow[0])
+        self._stft = _stft
+        
 
     def __call__(self, sig, pre_emphasis=True):
         """Enhance a signal with SSF."""
         if pre_emphasis:
             sig = lfilter([1, -.97], [1], sig)
+
         sigspec = self._stft(sig)
-        wgts = self._ssf((np.abs(sigspec) @ self.freqwgts)**2)
-        mask = (wgts @ self.freqwgts.T) / self.freqwgts.sum(axis=1)
-        sig = self._istft(sigspec*mask)
+        out = self._ssf(sigspec)
+        
         if pre_emphasis:
-            sig = lfilter([1], [1, -.97], sig)
+            sig = lfilter([1], [1, -.97], out)
 
         return sig
-
 
 
 def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3):
