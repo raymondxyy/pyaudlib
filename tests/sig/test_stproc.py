@@ -12,8 +12,8 @@ def test_stproc():
     hop = .5
     wind = hamming(512, hop=hop, synth=True)
 
-    frames = stana(sig, sr, wind, hop, synth=True)
-    sigsynth = ola(frames, sr, wind, hop)
+    frames = stana(sig, wind, hop, synth=True)
+    sigsynth = ola(frames, wind, hop)
 
     assert np.allclose(sig, sigsynth[:len(sig)])
 

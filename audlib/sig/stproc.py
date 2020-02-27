@@ -1,8 +1,7 @@
 """Short-Time PROCessing of audio signals.
 
 This module implements common audio analysis and synthesis techniques based on
-short-time signal analysis. All short-time representations are returned as
-GeneratorType.
+short-time signal analysis.
 
 See Also
 --------
@@ -19,10 +18,11 @@ from numpy.lib.stride_tricks import as_strided
 from .window import hop2hsize
 
 
-def stcenters(sig, sr, wind, hop, synth=False, center=False):
-    """Calculate window centers for each frame.
+def stcenters(sig, wind, hop, synth=False, center=False):
+    """Calculate the window center in samples for each short-time frame.
 
     See `numframes` for meaning of the parameters.
+
     """
     ssize = len(sig)
     fsize = len(wind)
@@ -35,28 +35,28 @@ def stcenters(sig, sr, wind, hop, synth=False, center=False):
         sstart = 0
     send = ssize
 
-    return (np.arange(sstart, send, hsize) + (fsize-1)/2.) / sr
+    return (np.arange(sstart, send, hsize) + (fsize-1)/2.)
 
 
-def numframes(sig, sr, wind, hop, synth=False, center=False):
-    """Calculate total number of frames.
+def numframes(sig, wind, hop, synth=False, center=False):
+    """Calculate total number of short-time frames.
 
-    Use this function to pre-determine the size of stft.
+    Use this function to pre-determine the size of short-time transforms.
 
     Parameters
     ----------
     sig: array_like
         Signal to be analyzed.
-    sr: int
-        Sampling rate.
     wind: array_like
         Window function.
     hop: float or int
         Hop fraction in (0, 1) or hop size in integers.
-    trange: tuple of float
-        Starting and ending point in seconds.
-        Default to (None, None), which computes a duration that enables
-        perfect reconstruction.
+    synth: bool, False
+        Whether short-time synthesis will be eventually used.
+        This option has higher priority than center
+    center: bool, False
+        Whether the first frame is centered around 0.
+        This option is ignored if synth=True.
 
     Returns
     -------
@@ -82,15 +82,13 @@ def numframes(sig, sr, wind, hop, synth=False, center=False):
     return math.ceil((send-sstart)/hsize)
 
 
-def stana(sig, sr, wind, hop, synth=False, center=False):
+def stana(sig, wind, hop, synth=False, center=False):
     """[S]hort-[t]ime [Ana]lysis of audio signal by windowing.
 
     Parameters
     ----------
     sig: array_like
         Time series to be analyzed.
-    sr: int
-        Sampling rate.
     wind: array_like
         Window function used for framing. See `window` for window functions.
     hop: float or int
@@ -158,7 +156,7 @@ def stana(sig, sr, wind, hop, synth=False, center=False):
     """
 
 
-def ola(sframes, sr, wind, hop):
+def ola(sframes, wind, hop):
     """Short-time Synthesis by [O]ver[l]ap-[A]dd.
 
     Perform the Overlap-Add algorithm on an array of short-time analyzed
@@ -170,8 +168,6 @@ def ola(sframes, sr, wind, hop):
     ----------
     sframes: array_like or iterable
         Array of short-time frames.
-    sr: int
-        Sampling rate.
     wind: 1-D ndarray
         Window function.
     hop: int, float

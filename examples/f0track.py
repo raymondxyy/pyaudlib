@@ -85,11 +85,12 @@ def pitch_demo(sig):
     fig2, axes = plt.subplots(2, 1, sharex=True)
     ax = axes[0]
     from audlib.plot import specgram
-    specgram(hist, ax, time_axis=stcenters(sig, SR, wind, hop, center=True))
+    specgram(hist, ax, time_axis=stcenters(sig, wind, hop, center=True)/SR)
     ax.set_title("T0 Histogram")
     ax.set_ylabel("Lag")
     ax = axes[1]
-    specgram(medfilt2d(hist, kernel_size=(5, 1)), ax, time_axis=stcenters(sig, SR, wind, hop, center=True))
+    specgram(medfilt2d(hist, kernel_size=(5, 1)), ax,
+             time_axis=stcenters(sig, wind, hop, center=True)/SR)
     ax.set_title("T0 Histogram - Median Filtered (3x3)")
     ax.set_ylabel("Lag")
 

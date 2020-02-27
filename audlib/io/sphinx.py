@@ -1,7 +1,4 @@
-# SPHINX format to numpy array bridge
-#
-# Author: Raymond Xia (yangyanx@andrew.cmu.edu)
-
+"""I/O bridge for the SPHINX feature format."""
 import numpy as np
 import struct
 import sys
@@ -86,39 +83,3 @@ def s3view(feat):
             sys.stdout.write("...\n")
     if MAXROW < rows:
         sys.stdout.write(".\n.\n.\n")
-
-
-def trans2chars(path, verbose=False):
-    """
-    Takes transcription from `inpath` and output tranascripts that have only
-    valid characters.
-    """
-    cset = set("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz #'-/@_")
-
-    def contains_only(seq, cset, verbose=False):
-        """
-        Check if sequence `seq` contains only characters in `cset`.
-        """
-        for c in seq:
-            if c not in cset:
-                if verbose:
-                    print('[{}] is not valid!'.format(c))
-                return False
-        return True
-    with open(path) as fp:
-        lines = fp.readlines()
-    out = []
-    for ii, line in enumerate(lines):
-        strlist = line.strip().split()
-        lineout, fid = ' '.join(strlist[1:-2]), strlist[-1]
-
-        # Remove special characters here
-        chars_to_remove = ':.()",%&?;{}'
-        lineout = lineout.translate({ord(c): None for c in chars_to_remove})
-
-        if not contains_only(lineout, cset, verbose):
-            print("File [{}] Line [{}] contains illegal character.".format(
-                fid, lineout))
-            exit(-1)
-        out.append(lineout)
-    return out

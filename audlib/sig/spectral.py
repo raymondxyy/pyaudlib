@@ -249,7 +249,8 @@ def mvnorm1(powspec, frameshift, tau=3., tau_init=.1, t_init=.2):
     tau_init: float, .1
         Initial time constant for fast adaptation.
     t_init: float, .2
-        Amount of time in seconds from the beginning during which `tau_init` is applied.
+        Amount of time in seconds from the beginning during which `tau_init`
+        is applied.
         The rest of time will use `tau`.
 
     Returns
@@ -296,7 +297,8 @@ def mvnorm(powspec, frameshift, tau=3., tau_init=.1, t_init=.2):
     tau_init: float, .1
         Initial time constant for fast adaptation.
     t_init: float, .2
-        Amount of time in seconds from the beginning during which `tau_init` is applied.
+        Amount of time in seconds from the beginning during which `tau_init`
+        is applied.
         The rest of time will use `tau`.
 
     Returns

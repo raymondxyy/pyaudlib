@@ -1,4 +1,4 @@
-"""Basic and Advanced Neural Network Modules."""
+"""Neural Network modules."""
 import torch
 from torch.nn.parameter import Parameter
 from torch.nn import functional as F

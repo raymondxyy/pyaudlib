@@ -17,8 +17,8 @@ class ZCREnergy(object):
     def __init__(self, sr, wind, hop):
         """Instantiate a ZCREnergy class."""
         super(ZCREnergy, self).__init__()
-        self.numframes = lambda sig: numframes(sig, sr, wind, hop, center=True)
-        self.stana = lambda sig: stana(sig, sr, wind, hop, center=True)
+        self.numframes = lambda sig: numframes(sig, wind, hop, center=True)
+        self.stana = lambda sig: stana(sig, wind, hop, center=True)
 
     def zcre(self, sig, lpc_order=0):
         """Compute the ratio of zero-crossing rate and energy of a signal."""

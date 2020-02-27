@@ -1,4 +1,4 @@
-"""Utility Functions and Neural Networks."""
+"""Utility functions for neural networks."""
 import numpy as np
 import torch
 

@@ -26,7 +26,7 @@ def test_pncc():
     hop = .01
     nfft = 1024
     wind = hamming(int(wlen*sr))
-    powerspec = stpowspec(sig, sr, wind, int(hop*sr), nfft, synth=False)
+    powerspec = stpowspec(sig, wind, int(hop*sr), nfft, synth=False)
     gtbank = Gammatone(sr, 40)
 
     wts = gtbank.gammawgt(nfft, powernorm=True, squared=True)
@@ -47,7 +47,7 @@ def test_invpnspec():
     hop = .01
     nfft = 1024
     wind = hamming(int(wlen*sr))
-    spec = stft(sig, sr, wind, hop, nfft, synth=True, zphase=True)
+    spec = stft(sig, wind, hop, nfft, synth=True, zphase=True)
     pspec = spec.real**2 + spec.imag**2
     gtbank = Gammatone(sr, 40)
 
@@ -56,7 +56,7 @@ def test_invpnspec():
 
     mask40 = pncc(gammaspec, tempmask=True, synth=True)
     maskfull = invspec(mask40, wts)
-    sigsynth = istft((maskfull**.5)*spec, sr, wind, hop, nfft, zphase=True)
+    sigsynth = istft((maskfull**.5)*spec, wind, hop, nfft, zphase=True)
 
     return
 

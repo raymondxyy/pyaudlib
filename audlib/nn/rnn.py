@@ -1,4 +1,4 @@
-"""A collection of recurrent neural networks for processing time series."""
+"""A collection of Recurrent Neural Networks for processing time series."""
 import torch
 from torch.nn import Module
 import torch.nn as nn

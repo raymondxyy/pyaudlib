@@ -16,8 +16,8 @@ def test_stft():
             for hop in (0.25, 0.5):
                 wind = hamming(int(wlen*SR), hop=hop, synth=True)
                 nfft = nextpow2(len(wind))
-                spec = stft(sig, SR, wind, hop, nfft, synth=True, zphase=zp)
-                sigsynth = istft(spec, SR, wind, hop, nfft, zphase=zp)
+                spec = stft(sig, wind, hop, nfft, synth=True, zphase=zp)
+                sigsynth = istft(spec, wind, hop, nfft, zphase=zp)
                 assert np.allclose(sig, sigsynth[:len(sig)])
 
 
