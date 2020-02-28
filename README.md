@@ -23,6 +23,13 @@ Some use cases of audlib are:
 
 audlib focuses on correctness, efficiency, and simplicity. Signal processing functionalities are mathematically checked whenever possible (e.g. constant overlap-add, `istft(stft(X))==X`). Deep neural networks follow the [PyTorch][pytorch]'s convention.
 
+## Breaking Changes
+
+- 0.2.0
+  - `audioread` follows the interface of `soundfile.read`
+  - `audiowrite` follows the interface of `soundfile.write`
+  - The argument `sr` is removed from all short-time transforms
+
 ## Installation
 
 ```sh
@@ -56,8 +63,11 @@ More extensive examples can be found in `examples/`.
 ## Release history
 
 - 0.0.1
-  - Work in progress
   - First release on PyPI
+- 0.0.2
+  - Streamlines optional installation
+  - Improves API (**see breaking changes**)
+  - Adds coverage test
 
 ## Authors
 

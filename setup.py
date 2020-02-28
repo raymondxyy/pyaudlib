@@ -14,7 +14,7 @@ with open('README.md', 'r') as fh:
 
 setup(
     name='audlib',
-    version='0.0.1.1',
+    version='0.0.2',
     author='Raymond Xia',
     author_email='raymondxia@cmu.edu',
     description='A speech signal processing library with emphasis on deep learning.',
