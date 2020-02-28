@@ -11,6 +11,52 @@ from .util import asymfilt, nextpow2
 from .temporal import convdn, conv
 
 
+def ssf(powerspec, lambda_lp, c0=.01, ptype=2):
+    """Suppression of Slowly-varying components and the Falling edge.
+
+    This implementation follows paper by Kim and Stern:
+    Kim, Chanwoo, and Richard M. Stern."Nonlinear enhancement of onset
+    for robust speech recognition." Eleventh Annual Conference of the
+    International Speech Communication Association. 2010.
+
+    Parameters
+    ----------
+    powerspec: numpy.ndarray
+        Short-time power spectra. N.B.: This input power spectrum is not
+        frequency integrated
+    lambda_lp: float
+        Time constant to be used as the first-order lowpass filter coefficient.
+
+    Keyword Parameters
+    ------------------
+    c0: float, 0.01
+        Power floor constant.
+    ptype: int, 2
+        SSF processing type; either 1 or 2.
+
+    Returns
+    -------
+    out: numpy.ndarray
+        If gbank is not specified, this function outputs the ratio
+        of processed power to original power (i.e., Eq. (6) in Kim, et al.).
+        If gbank is specified, this function outputs the reconstructed
+        spectrum (i.e., Eq. (9) in Kim, et al.).
+
+    """
+
+    # Low-pass filtered power
+    mspec = signal.lfilter([1-lambda_lp], [1, -lambda_lp], powerspec, axis=0)
+
+    if ptype == 1:
+        ptilde = np.maximum(powerspec-mspec, c0*powerspec)
+    elif ptype == 2:
+        ptilde = np.maximum(powerspec-mspec, c0*mspec)
+    else:
+        raise ValueError(f"Invalid ptype: [{ptype}]")
+
+    return ptilde / powerspec
+
+
 def pncc(powerspec, medtime=2, medfreq=4, synth=False,
          vad_const=2, lambda_mu=.999, powerlaw=True, cmn=True, ccdim=13,
          tempmask=True, lambda_t=.85, mu_t=.2):

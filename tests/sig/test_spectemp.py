@@ -1,11 +1,22 @@
 """Test spectro-temporal functions."""
 import numpy as np
-from audlib.sig.spectemp import strf
 from audlib.quickstart import welcome
 from audlib.sig.window import hamming
 from audlib.sig.transform import stpowspec, stft, istft
 from audlib.sig.fbanks import Gammatone
-from audlib.sig.spectemp import pncc, invspec
+from audlib.sig.spectemp import strf, pncc, ssf, invspec
+
+
+WELCOME, SR = welcome()
+
+
+def test_ssf():
+    powerspec = stpowspec(WELCOME, hamming(int(.025*SR)), .5, 512)
+    wts = Gammatone(SR, 40).gammawgt(512)
+
+    mask = ssf(powerspec @ wts, .4)
+    assert mask.shape[0] == powerspec.shape[0]
+    assert mask.shape[1] == wts.shape[1]
 
 
 def test_strf():
@@ -21,13 +32,12 @@ def test_strf():
 
 
 def test_pncc():
-    sig, sr = welcome()
     wlen = .025
     hop = .01
     nfft = 1024
-    wind = hamming(int(wlen*sr))
-    powerspec = stpowspec(sig, wind, int(hop*sr), nfft, synth=False)
-    gtbank = Gammatone(sr, 40)
+    wind = hamming(int(wlen*SR))
+    powerspec = stpowspec(WELCOME, wind, int(hop*SR), nfft, synth=False)
+    gtbank = Gammatone(SR, 40)
 
     wts = gtbank.gammawgt(nfft, powernorm=True, squared=True)
     gammaspec = powerspec @ wts
@@ -42,14 +52,13 @@ def test_pncc():
 
 def test_invpnspec():
     # TODO
-    sig, sr = welcome()
     wlen = .025
     hop = .01
     nfft = 1024
-    wind = hamming(int(wlen*sr))
-    spec = stft(sig, wind, hop, nfft, synth=True, zphase=True)
+    wind = hamming(int(wlen*SR))
+    spec = stft(WELCOME, wind, hop, nfft, synth=True, zphase=True)
     pspec = spec.real**2 + spec.imag**2
-    gtbank = Gammatone(sr, 40)
+    gtbank = Gammatone(SR, 40)
 
     wts = gtbank.gammawgt(nfft, powernorm=True, squared=True)
     gammaspec = pspec @ wts
@@ -63,4 +72,7 @@ def test_invpnspec():
 
 if __name__ == "__main__":
     test_strf()
+    test_pncc()
+    test_ssf()
     test_invpnspec()
+    test_ssf()

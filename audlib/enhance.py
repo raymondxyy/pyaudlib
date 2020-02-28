@@ -10,11 +10,80 @@
 
 import numpy as np
 from numpy.fft import rfft, irfft
+from scipy.signal import lfilter
 
 from .sig.stproc import stana, ola
+from .sig.fbanks import Gammatone
 from .sig.temporal import lpc_parcor, ref2pred
 from .sig.transform import stft, istft, stpsd
+from .sig.spectemp import ssf, invspec
 from .noise import mmse_henriks as npsd_henriks
+
+
+class SSFEnhancer(object):
+    """Suppression of Slowly-varying components and the Falling edge.
+
+    This implementation follows paper by Kim and Stern:
+    Kim, Chanwoo, and Richard M. Stern."Nonlinear enhancement of onset
+    for robust speech recognition." Eleventh Annual Conference of the
+    International Speech Communication Association. 2010.
+
+    See Also
+    --------
+    spectemp.ssf
+
+    """
+    def __init__(self, sr, wind, hop, nfft, num_chan=40):
+        """Instantiate an SSF enhancer.
+
+        Parameters
+        ----------
+        sr: int
+            Sampling rate in Hz.
+        wind: numpy.ndarray
+            Window function.
+        hop: float
+            Hop fraction.
+        nfft: int
+            Number of DFT points.
+
+        Keyword Parameters
+        ------------------
+        num_chan: int, 40
+            Number of channels in the Gammatone filterbank.
+        ptype: int, 2
+            SSF type. Default to 2.
+
+        """
+        assert sr > 9000, "Sampling rate too low!"
+        self.gbank = Gammatone(sr, num_chan, (130., 4500.))
+        self.gammawgt = self.gbank.gammawgt(nfft)
+
+        def _stft(sig):
+            return stft(sig, wind, hop, nfft, synth=True, zphase=True)
+
+        def _istft(spec):
+            return istft(spec, wind, hop, nfft, zphase=True)
+
+        self.stft = _stft
+        self.istft = _istft
+
+
+    def __call__(self, sig, lambda_lp, c0=.01, ptype=2, pre_emphasis=True):
+        """Enhance a signal with SSF."""
+        if pre_emphasis:
+            sig = lfilter([1, -.97], [1], sig)
+
+        sigspec = self.stft(sig)
+        gpmask = ssf((sigspec.real**2 + sigspec.imag**2) @ self.gammawgt,
+                     lambda_lp, c0, ptype)
+        pmask = invspec(gpmask, self.gammawgt)
+        out = self.istft(np.sqrt(pmask) * sigspec)
+
+        if pre_emphasis:
+            out = lfilter([1], [1, -.97], out)
+
+        return out
 
 
 def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3,
