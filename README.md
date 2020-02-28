@@ -25,7 +25,7 @@ audlib focuses on correctness, efficiency, and simplicity. Signal processing fun
 
 ## Breaking Changes
 
-- 0.2.0
+- 0.0.2
   - `audioread` follows the interface of `soundfile.read`
   - `audiowrite` follows the interface of `soundfile.write`
   - The argument `sr` is removed from all short-time transforms
