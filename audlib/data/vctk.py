@@ -231,7 +231,7 @@ class SEVCTK2chan(SEDataset):
             assert sr1 == sr2
             sample = NoisySpeech(noisy=[Audio(x1[tstart:tend], sr1),
                                         Audio(x2[tstart:tend], sr1)])
- 
+
         else:  # train/valid mode produces 2-chan audios + clean speech
             noisy1, noisy2, meta, noise = self.filepaths[idx]
             sr, x1 = wavfile.read(noisy1)
@@ -261,7 +261,10 @@ class SEVCTK2chan(SEDataset):
             xC = x1 - n1
             sample = NoisySpeech(noisy=[Audio(x1[tstart:tend], sr),
                                         Audio(x2[tstart:tend], sr)],
-                                 clean=Audio(xC[tstart:tend], sr))
+                                 clean=Audio(xC[tstart:tend], sr),
+                                 noise=Audio(n1[tstart:tend], sr),
+                                 snr=(xC[tstart:tend]**2).sum() /
+                                     (n1[tstart:tend]**2).sum())
 
         if self.transform:
             sample = self.transform(sample)

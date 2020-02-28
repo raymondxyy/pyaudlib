@@ -15,6 +15,15 @@ class GenericAudio(Audio):
     __slots__ = '__dict__'
 
 
+class AudioSpeaker(Audio):
+    """A class useful for speaker identification tasks."""
+    __slots__ = 'speaker'
+
+    def __init__(self, signal=None, samplerate=None, speaker=None):
+        super(AudioSpeaker, self).__init__(signal, samplerate)
+        self.speaker = speaker
+
+
 class AudioPitch(Audio):
     """A class useful for pitch extraction tasks."""
     __slots__ = 'pitch', 'egg'

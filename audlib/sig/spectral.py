@@ -1,4 +1,5 @@
 """Frame-level frequency-domain processing."""
+import math
 
 import numpy as np
 from numpy.fft import rfft, irfft
@@ -26,26 +27,44 @@ def magphase(cspectrum, unwrap=False):
     return mag, phs
 
 
-def logmagphase(cspectrum, unwrap=False, floor=-10.):
-    """Compute (log-magnitude, phase) of complex spectrum."""
-    mag, phs = magphase(cspectrum, unwrap=unwrap)
-    return logmag(mag, floor=floor), phs
+def logmag(sig, floor=-80.):
+    """Compute natural log magnitude of complex spectrum.
 
+    Parameters
+    ----------
+    sig: numpy.ndarray
+        Complex spectra.
+    floor: float, -80.
+        Magnitude floor in dB.
 
-def logmag(sig, floor=-10.):
-    """Compute log magnitude of complex spectrum.
-
-    Floor any -`np.inf` value to `floor` plus log minimum. If all values are
-    0s, floor all values to floor*5.
     """
-    mag = np.abs(sig)
-    zeros = mag == 0
-    logm = np.empty_like(mag)
-    logm[~zeros] = np.log(mag[~zeros])
-    logmin = np.log(mag[~zeros].min()) if np.any(~zeros) else floor*5
-    logm[zeros] = floor + logmin
+    eps = 10**(floor/20)
+    sigmag = np.abs(sig)
+    smallmag = sigmag < eps
+    sigmag[smallmag] = np.log(eps)
+    sigmag[~smallmag] = np.log(sigmag[~smallmag])
 
-    return logm
+    return sigmag
+
+
+def logpow(sig, floor=-80.):
+    """Compute natural log power of complex spectrum.
+
+    Parameters
+    ----------
+    sig: numpy.ndarray
+        Complex spectra.
+    floor: float, -80.
+        Magnitude floor in dB.
+
+    """
+    eps = 10**(floor/10)
+    sigpow = sig.real**2 + sig.imag**2
+    smallpower = sigpow < eps
+    sigpow[smallpower] = np.log(eps)
+    sigpow[~smallpower] = np.log(sigpow[~smallpower])
+
+    return sigpow
 
 
 def phasor(mag, phase):
@@ -210,87 +229,100 @@ def idct2(x_dct2, norm=True, dft=False):
     return x
 
 
-def realcep(frame, n, nfft=4096, floor=-10., comp=False, ztrans=False):
-    """Compute real cepstrum of short-time signal `frame`.
+def mvnorm1(powspec, frameshift, tau=3., tau_init=.1, t_init=.2):
+    """Online mean and variance normalization of a short-time power spectra.
 
-    There are two modes for calculation:
-        1. complex = False (default). This calculates c[n] using inverse DFT
-        of the log magnitude spectrum.
-        2. complex = True. This first calculates the complex cepstrum through
-        the z-transform method (see `compcep`), and takes the even function to
-        obtain c[n].
-    In both cases, `len(cep) = nfft//2+1`.
+    This function computes online mean/variance as a scalar instead of a vector
+    in `mvnorm`.
 
     Parameters
     ----------
-    frame: 1-D ndarray
-        signal to be processed.
-    nfft: non-negative int
-        nfft//2+1 cepstrum in range [0, nfft//2] will be evaluated.
-    floor: float [-10.]
-        flooring for log(0). Ignored if complex=True.
-    complex: boolean [False]
-        Use mode 2 for calculation.
+    powspec: numpy.ndarray
+        Real-valued short-time power spectra with dimension (T,F).
+    frameshift: float
+        Number of seconds between adjacent frame centers.
+
+    Keyword Parameters
+    ------------------
+    tau: float, 3.
+        Time constant of the median-time recursive averaging function.
+    tau_init: float, .1
+        Initial time constant for fast adaptation.
+    t_init: float, .2
+        Amount of time in seconds from the beginning during which `tau_init`
+        is applied.
+        The rest of time will use `tau`.
 
     Returns
     -------
-    cep: 1-D ndarray
-        Real ceptra of signal `frame` of:
-        1. length `len(cep) = nfft//2+1`.
-        2. quefrency index [0, nfft//2].
+    powspec_norm: numpy.ndarray
+        Normalized short-time power spectra with dimension (T,F).
 
     """
-    if comp:  # do complex method
-        ccep = compcep(frame, n-1, ztrans=ztrans)
-        rcep = .5*(ccep+ccep[::-1])
-        return rcep[n-1:]  # only keep non-negative quefrency
-    else:  # DFT method
-        rcep = irfft(logmag(rfft(frame, nfft), floor=floor))
-        return rcep[:n]
+    alpha = np.exp(-frameshift / tau)
+    alpha0 = np.exp(-frameshift / tau_init)  # fast adaptation
+    init_frames = math.ceil(t_init / frameshift)
+    assert init_frames < len(powspec)
+
+    mu = np.empty(len(powspec))
+    var = np.empty(len(powspec))
+    # Start with global mean and variance
+    mu[0] = alpha0 * powspec.mean() + (1-alpha0)*powspec[0].mean()
+    var[0] = alpha0 * (powspec**2).mean() + (1-alpha0)*(powspec[0]**2).mean()
+    for ii in range(1, init_frames):
+        mu[ii] = alpha0*mu[ii-1] + (1-alpha0)*powspec[ii].mean()
+        var[ii] = alpha0*var[ii-1] + (1-alpha0)*(powspec[ii]**2).mean()
+    for ii in range(init_frames, len(powspec)):
+        mu[ii] = alpha*mu[ii-1] + (1-alpha)*powspec[ii].mean()
+        var[ii] = alpha*var[ii-1] + (1-alpha)*(powspec[ii]**2).mean()
+
+    return (powspec - mu[:, np.newaxis]) / np.maximum(
+        np.sqrt(np.maximum(var[:, np.newaxis]-mu[:, np.newaxis]**2, 0)), 1e-12)
 
 
-def compcep(frame, n, nfft=4096, floor=-10., ztrans=False):
-    """Compute complex cepstrum of short-time signal using Z-transform.
-
-    Compute the aliasing-free complex cepstrum using Z-transform and polynomial
-    root finder. Implementation is based on RS eq 8.68 on page 436.
+def mvnorm(powspec, frameshift, tau=3., tau_init=.1, t_init=.2):
+    """Online mean and variance normalization of a short-time power spectra.
 
     Parameters
     ----------
-    frame: 1-D ndarray
-        signal to be processed.
-    n: non-negative int
-        index range [-n, n] in which complex cepstrum will be evaluated.
+    powspec: numpy.ndarray
+        Real-valued short-time power spectra with dimension (T,F).
+    frameshift: float
+        Number of seconds between adjacent frames.
+
+    Keyword Parameters
+    ------------------
+    tau: float, 3.
+        Time constant of the median-time recursive averaging function.
+    tau_init: float, .1
+        Initial time constant for fast adaptation.
+    t_init: float, .2
+        Amount of time in seconds from the beginning during which `tau_init`
+        is applied.
+        The rest of time will use `tau`.
 
     Returns
     -------
-    cep: 1-D ndarray
-        complex ceptrum of length `2n+1`; quefrency index [-n, n].
+    powspec_norm: numpy.ndarray
+        Normalized short-time power spectra with dimension (T,F).
 
     """
-    if ztrans:
-        frame = np.trim_zeros(frame)
-        f0 = frame[0]
-        roots = np.roots(frame/f0)
-        rmag = np.abs(roots)
-        assert 1 not in rmag
-        ra, rb = roots[rmag < 1], roots[rmag > 1]
-        amp = f0 * np.prod(rb)
-        if len(rb) % 2:  # odd number of zeros outside UC
-            amp = -amp
-        # obtain complex cepstrum through eq (8.68) in RS, pp. 436
-        cep = np.zeros(2*n+1)
-        if rb.size > 0:
-            for ii in range(-n, 0):
-                cep[-n+ii] = np.real(np.sum(rb**ii))/ii
-        cep[n] = np.log(np.abs(amp))
-        if ra.size > 0:
-            for ii in range(1, n+1):
-                cep[n+ii] = -np.real(np.sum(ra**ii))/ii
-    else:
-        assert n <= nfft//2
-        spec = rfft(frame, n=nfft)
-        lmag, phase = logmagphase(spec, unwrap=True, floor=floor)
-        cep = irfft(lmag+1j*phase, n=nfft)[:2*n+1]
-        cep = np.roll(cep, n)
-    return cep
+    alpha = np.exp(-frameshift / tau)
+    alpha0 = np.exp(-frameshift / tau_init)  # fast adaptation
+    init_frames = math.ceil(t_init / frameshift)
+    assert init_frames < len(powspec)
+
+    mu = np.empty_like(powspec)
+    var = np.empty_like(powspec)
+    # Start with global mean and variance
+    mu[0] = alpha0 * powspec.mean(axis=0) + (1-alpha0)*powspec[0]
+    var[0] = alpha0 * (powspec**2).mean(axis=0) + (1-alpha0)*(powspec[0]**2)
+    for ii in range(1, init_frames):
+        mu[ii] = alpha0*mu[ii-1] + (1-alpha0)*powspec[ii]
+        var[ii] = alpha0*var[ii-1] + (1-alpha0)*(powspec[ii]**2)
+    for ii in range(init_frames, len(powspec)):
+        mu[ii] = alpha*mu[ii-1] + (1-alpha)*powspec[ii]
+        var[ii] = alpha*var[ii-1] + (1-alpha)*(powspec[ii]**2)
+
+    return (powspec - mu) / np.maximum(np.sqrt(
+        np.maximum(var-mu**2, 0)), 1e-12)

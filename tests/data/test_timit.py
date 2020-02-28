@@ -1,18 +1,24 @@
 """Test suite for TIMIT."""
 import os
-from audlib.data.timit import TIMIT
+import pytest
+from audlib.data.timit import TIMIT, utt_no_shorter_than, randselwave, \
+    randselphon, isvowel
 
 
+@pytest.mark.skipif('TIMIT_ROOT' not in os.environ,
+                    reason='ENV $TIMIT_ROOT unspecified.')
 def test_timit():
-    SI = TIMIT('/home/xyy/data/timit',
-               filt=lambda p: 'SI' in os.path.basename(p).upper(),
-               readmode='utterance')
-    SX = TIMIT('/home/xyy/data/timit',
-               filt=lambda p: 'SX' in os.path.basename(p).upper(),
-               readmode='rand-phone')
+    #TODO
+    SI = TIMIT(os.environ['TIMIT_ROOT'],
+               filt=lambda p: 'SI' in os.path.basename(p).upper() and
+                              utt_no_shorter_than(p, 5),
+               transform=randselwave)
+    sample = SI[0]
+    print(sample)
 
-    print(SX, SI)
-
-
-if __name__ == "__main__":
-    test_timit()
+    SI = TIMIT(os.environ['TIMIT_ROOT'],
+               filt=lambda p: 'SI' in os.path.basename(p).upper() and
+                              utt_no_shorter_than(p, 5),
+               transform=lambda s: randselphon(s, isvowel))
+    sample = SI[0]
+    print(sample)

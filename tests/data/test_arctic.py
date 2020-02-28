@@ -1,13 +1,11 @@
 """Test the ARCTIC dataset."""
-from audlib.data.arctic import ARCTIC1
+import os
+import pytest
+from audlib.data.arctic import ARCTIC
 
 
+@pytest.mark.skipif('ARCTIC_ROOT' not in os.environ,
+                    reason='ENV $ARCTIC_ROOT unspecified.')
 def test_arctic():
-    arctic = ARCTIC1('/home/xyy/data/ARCTIC', egg=True)
+    arctic = ARCTIC(os.environ['ARCTIC_ROOT'], egg=True)
     print(arctic)
-    for ii, elem in enumerate(arctic):
-        pass
-
-
-if __name__ == "__main__":
-    test_arctic()

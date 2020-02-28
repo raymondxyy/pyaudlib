@@ -1,6 +1,6 @@
 """Datasets derived from the TIMIT dataset for phoneme recognition."""
 import os
-from random import randint
+from random import randrange
 
 from ..io.audio import audioinfo
 from .dataset import AudioDataset, audioread
@@ -12,15 +12,21 @@ PHONETABLE = {p: i for i, p in enumerate(
         eng epi er ey f g gcl h# hh hv ih ix iy jh k kcl l m n ng nx ow
         oy p pau pcl q r s sh t tcl th uh uw ux v w y z zh""".split()
     )}
-VOWELS = """iy ih eh ey ae aa aw ay ah ao oy ow uh uw ux er ax ix axr 
+VOWELS = """iy ih eh ey ae aa aw ay ah ao oy ow uh uw ux er ax ix axr
             ax-h""".split()
 SEMIVOWELS = "l r w y hh hv el".split()
+STOPS = "b d g p t k dx q".split()
+AFFRICATES = "jh ch".split()
+FRICATIVES = "s sh z zh f th v dh".split()
+NASALS = "m n ng em en eng nx".split()
+OTHERS = "pau epi h# 1 2".split()
 
 
 def phnread(path):
     """Read a .PHN (or .WRD) file.
 
-    Format:
+    Format: <BEGIN-SAMPLE> <ENDING-SAMPLE> <PHONE>
+    Example:
         0 3050 h#
         3050 4559 sh
         4559 5723 ix
@@ -38,7 +44,12 @@ def phnread(path):
 
 
 def txtread(path):
-    """Read a .TXT transcript file."""
+    """Read a .TXT transcript file.
+
+    Format: <BEGIN-SAMPLE> <END-SAMPLE> <TRANSCRIPT>
+    Example:
+        0 46797 She had your dark suit in greasy wash water all year.
+    """
     try:
         with open(path) as fp:
             for line in fp:
@@ -52,42 +63,50 @@ def txtread(path):
 
 
 def spkrinfo(path, istrain):
-    """Load speaker table from file."""
+    """Load speaker table from file.
+
+    Format:
+        ID  Sex DR Use  RecDate   BirthDate  Ht    Race Edu  Comments
+    Example:
+        ABC0  M  6  TRN  03/03/86  06/17/60  5'11"  WHT  BS
+
+    Parameters
+    ----------
+    path: str
+        Path to SPRKINFO.TXT.
+    istrain: bool
+        Retrieve speakers from either train or test set.
+
+    Return
+    ------
+    type: dict[str] -> int
+
+    """
     with open(path) as fp:
-        spkrt = {}  # spkrt['spkr'] = int(label)
-        ii = 0
+        spkrt = {}
+        ii = 0  # for label
         for line in fp:
             if line[0] != ';':  # ignore header
                 line = line.rstrip().split()
                 sid, train = line[0], line[3].upper() == 'TRN'
-                if not (istrain ^ train):
+                if not istrain ^ train:
                     spkrt[sid] = ii
                     ii += 1
     return spkrt
 
 
-def isvowel(phone, semivowels=True):
-    """Check if phone is a vowel (or a semivowel)."""
-    if semivowels:
-        return (phone in VOWELS) or (phone in SEMIVOWELS)
-    else:
-        return phone in VOWELS
-
-
 class TIMITSpeech(Audio):
     """A data structure for TIMIT audio."""
-    __slots__ = 'speaker', 'gender', 'transcript', 'phonemeseq', 'wordseq',\
-                'phone'
+    __slots__ = 'speaker', 'gender', 'transcript', 'phonemeseq', 'wordseq'
 
     def __init__(self, signal=None, samplerate=None, speaker=None, gender=None,
-                 transcript=None, phonemeseq=None, wordseq=None, phone=None):
+                 transcript=None, phonemeseq=None, wordseq=None):
         super(TIMITSpeech, self).__init__(signal, samplerate)
-        self.speaker = speaker
-        self.transcript = transcript
-        self.phonemeseq = phonemeseq
-        self.gender = gender
-        self.wordseq = wordseq
-        self.phone = phone  # phone label according to _phon_table
+        self.speaker = speaker  # str
+        self.gender = gender  # str
+        self.transcript = transcript  # str
+        self.phonemeseq = phonemeseq  # [((sample-start, sample-end), str)]
+        self.wordseq = wordseq  # [((sample-start, sample-end), str)]
 
 
 class TIMIT(AudioDataset):
@@ -120,26 +139,22 @@ class TIMIT(AudioDataset):
     """
     @staticmethod
     def isaudio(path):
-        return path.endswith('.WAV')
+        return path.upper().endswith('.WAV')
 
-    def __init__(self, root, train=True, sr=None, filt=None,
-                 readmode='utterance', transform=None, nosilence=False):
+    def __init__(self, root, task=None, train=True, filt=None, transform=None):
         """Instantiate an ASVspoof dataset.
 
         Parameters
         ----------
         root: str
             The root directory of TIMIT.
-        train: bool, optional
-            Retrieve training partition?
-        sr: int, optional
-            Sampling rate in Hz. TIMIT is recorded at 16kHz.
-        filt: callable, optional
+        task: str, None
+            Convert string label to integer labels if specified.
+            One of [speaker/phoneme].
+        train: bool, True
+            Retrieve training or test set.
+        filt: callable, None
             Filters to be applied on each audio path. Default to None.
-        phone: bool, False
-            Read the audio of an phoneme instead of a sentence?
-            If True, randomly read ONE phone segment from an audio.
-            If False, entire audio will be read.
         transform: callable(TIMITSpeech) -> TIMITSpeech
             User-defined transformation function.
 
@@ -155,16 +170,23 @@ class TIMIT(AudioDataset):
 
         """
         self.train = train
-        # hard-coded phone labels
-        self._phon_table = PHONETABLE
         self._spkr_table = spkrinfo(
             os.path.join(root, 'TIMIT/DOC/SPKRINFO.TXT'), train)
         if train:
             audroot = os.path.join(root, 'TIMIT/TRAIN')
         else:
             audroot = os.path.join(root, 'TIMIT/TEST')
-        self.sr = sr
-        self.nosilence = nosilence
+
+        def _2label(sample):
+            """Convert true labels to integer labels for specific tasks."""
+            if task == 'speaker':
+                return self.spkr2label(sample)
+            elif task == 'phoneme':
+                return self.phon2label(sample)
+            elif task is None:
+                return sample
+            else:
+                raise NotImplementedError
 
         def _read(path):
             """Different options to read an audio file."""
@@ -172,47 +194,33 @@ class TIMIT(AudioDataset):
             gsid = pbase.split('/')[-2]
             gender, sid = gsid[0], gsid[1:]
             assert sid in self._spkr_table
-            sid = self._spkr_table[sid]
             phoneseq = phnread(pbase+'.PHN')
-            if readmode == 'utterance':  # read entire utterance
-                wrdseq = phnread(pbase+'.WRD')
-                transcrpt = txtread(pbase+'.TXT')
-                if self.nosilence:
-                    ns, ne = wrdseq[0][0][0], wrdseq[-1][0][1]
-                    sig, sr = audioread(path, sr=self.sr, start=ns, stop=ne)
-                    pseq = []
-                    for (ss, ee), pp in phoneseq:
-                        ss -= ns
-                        ee -= ns
-                        if ss >= 0:  # The "silence" part has labels.
-                            pseq.append(((ss, ee), pp))
-                    phoneseq = pseq
-                else:
-                    sig, sr = audioread(path, sr=self.sr)
-
-                return TIMITSpeech(sig, sr, speaker=sid, gender=gender,
-                                   transcript=transcrpt, phonemeseq=phoneseq,
-                                   wordseq=wrdseq,
-                                   phone=[(t, self._phon_table[p])
-                                          for t, p in phoneseq])
-            elif readmode == 'rand-phoneme':
-                # Ignore nosilence here
-                (ns, ne), pp = phoneseq[randint(0, len(phoneseq)-1)]
-                sig, sr = audioread(path, sr=self.sr, norm=True,
-                                    start=ns, stop=ne)
-                return TIMITSpeech(sig, sr, speaker=sid, gender=gender,
-                                   phone=self._phon_table[pp])
-            else:
-                raise NotImplementedError
+            wrdseq = phnread(pbase+'.WRD')
+            transcrpt = txtread(pbase+'.TXT')
+            return _2label(
+                TIMITSpeech(*audioread(path), speaker=sid, gender=gender,
+                            transcript=transcrpt, phonemeseq=phoneseq,
+                            wordseq=wrdseq))
 
         super(TIMIT, self).__init__(
             audroot, filt=self.isaudio if not filt else lambda p:
                 self.isaudio(p) and filt(p), read=_read, transform=transform)
 
+    def spkr2label(self, sample):
+        """Replace sample.speaker by its integer ID."""
+        sample.speaker = self._spkr_table[sample.speaker]
+        return sample
+
+    def phon2label(self, sample):
+        """Replace sample.phonemeseq by its integer ID."""
+        sample.phonemeseq = [
+            (t, PHONETABLE[p]) for t, p in sample.phonemeseq]
+        return sample
+
     def __repr__(self):
         """Representation of TIMIT."""
-        return r"""{}({}, sr={}, transform={})
-        """.format(self.__class__.__name__, self.root, self.sr, self.transform)
+        return r"""{}({}, transform={})
+        """.format(self.__class__.__name__, self.root, self.transform)
 
     def __str__(self):
         """Print out a summary of instantiated dataset."""
@@ -221,9 +229,9 @@ class TIMIT(AudioDataset):
             sid = path.split('/')[-2][1:]
             assert sid in self._spkr_table, f"{sid} not a valid speaker!"
             spkr_appeared.add(sid)
-        phoncts = {p: 0 for p in self._phon_table}
-        mindur = {p: 100 for p in self._phon_table}
-        maxdur = {p: 0 for p in self._phon_table}
+        phoncts = {p: 0 for p in PHONETABLE}
+        mindur = {p: 100 for p in PHONETABLE}
+        maxdur = {p: 0 for p in PHONETABLE}
         for path in self._filepaths:
             sr = audioinfo(os.path.join(self.root, path)).samplerate
             path = os.path.join(self.root, os.path.splitext(path)[0]+'.PHN')
@@ -252,16 +260,73 @@ class TIMIT(AudioDataset):
 
 
 # Some filter functions
+def isvowel(phone, semivowels=True):
+    """Check if phone is a vowel (or a semivowel)."""
+    if semivowels:
+        return (phone in VOWELS) or (phone in SEMIVOWELS)
+
+    return phone in VOWELS
+
+
+def isspeech(phone):
+    """Check if phone belongs to speech."""
+    return phone not in OTHERS
+
 
 def utt_no_shorter_than(path, duration, unit='second'):
     """Check for utterance duration after silence removal."""
     pbase = os.path.splitext(path)[0]
-    wrdseq = phnread(pbase+'.WRD')
-    dur = wrdseq[-1][0][1] - wrdseq[0][0][0]
+    phonseq = phnread(pbase+'.PHN')
+    dur = sum(te-ts if isspeech(p) else 0 for (ts, te), p in phonseq)
     if unit == 'second':
-        sr = audioinfo(path).samplerate
-        return dur / sr >= duration
+        return dur >= duration * audioinfo(path).samplerate
     elif unit == 'sample':
         return dur >= duration
     else:
         raise ValueError(f"Unsupported unit: {unit}.")
+
+
+# Some transform functions
+def rmsilence(sample):
+    """Remove silence from the waveform of a sample."""
+    ns, ne = sample.wordseq[0][0][0], sample.wordseq[-1][0][1]
+    return sample.signal[ns:ne]
+
+
+def randselwave(sample, minlen=0, maxlen=None, nosilence=True):
+    """Randomly select a portion of the signal from a sample."""
+    if nosilence:
+        sig = rmsilence(sample)
+    else:
+        sig = sample.signal
+
+    sigsize = len(sig)
+    minoffset = int(minlen * sample.samplerate)
+    maxoffset = min(int(maxlen*sample.samplerate),
+                    sigsize) if maxlen else sigsize
+
+    assert (minoffset < maxoffset) and (minoffset <= sigsize), \
+        f"""BAD: siglen={sigsize}, minlen={minoffset}, maxlen={maxoffset}"""
+
+    # Select begin sample
+    ns = randrange(max(1, sigsize-minoffset))
+    ne = randrange(ns+minoffset, min(ns+maxoffset, sigsize+1))
+
+    return sig[ns:ne]
+
+
+def randselphon(sample, phonfunc=None):
+    """Randomly select the waveform corresponding to a single phone.
+
+    Keyword Parameters
+    ------------------
+    phonfunc: callable(str) -> bool, None
+        A filter function on phone.
+
+    """
+    (ns, ne), ph = sample.phonemeseq[randrange(len(sample.phonemeseq))]
+    if phonfunc is not None:
+        while not phonfunc(ph):
+            (ns, ne), ph = sample.phonemeseq[randrange(len(sample.phonemeseq))]
+
+    return sample.signal[ns:ne], ph

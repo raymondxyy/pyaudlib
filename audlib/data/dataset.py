@@ -4,11 +4,12 @@ This is a direct copy of PyTorch's dataset class:
 https://pytorch.org/docs/stable/_modules/torch/utils/data/dataset.html#Dataset
 with some omissions and additions.
 """
+import math
 import os
 import bisect
 
 from ..io.batch import lsfiles
-from ..io.audio import audioread
+from ..io.audio import audioread, audioinfo
 from .datatype import Audio
 
 
@@ -60,11 +61,11 @@ class AudioDataset(Dataset):
         return path.endswith(('.wav', '.flac', '.sph'))
 
     @staticmethod
-    def read(path, sr):
+    def read(path):
         """Read audio and put in an Audio object."""
-        return Audio(*audioread(path, sr=sr))
+        return Audio(*audioread(path))
 
-    def __init__(self, root, sr=None, filt=None, read=None, transform=None):
+    def __init__(self, root, filt=None, read=None, transform=None):
         """Instantiate an audio dataset.
 
         Parameters
@@ -91,10 +92,9 @@ class AudioDataset(Dataset):
         """
         super(AudioDataset).__init__()
         self.root = root
-        self.sr = sr
         self._filepaths = lsfiles(root, filt=filt if filt else self.isaudio,
                                   relpath=True)
-        self.read = read if read else lambda f: self.read(f, sr)
+        self.customread = read
         self.transform = transform
 
     @property
@@ -108,7 +108,112 @@ class AudioDataset(Dataset):
 
     def __getitem__(self, idx):
         """Get i-th valid item after reading in and transform."""
-        sample = self.read(os.path.join(self.root, self._filepaths[idx]))
+        if self.customread:
+            sample = self.customread(
+                os.path.join(self.root, self._filepaths[idx]))
+        else:
+            sample = self.read(
+                os.path.join(self.root, self._filepaths[idx]))
+
+        if self.transform:
+            sample = self.transform(sample)
+
+        return sample
+
+    def __str__(self):
+        """Print out a summary of instantiated dataset."""
+        report = """
+            +++++ Summary for [{}] +++++
+            Total [{}] valid files to be processed.
+        """.format(self.__class__.__name__, len(self._filepaths))
+
+        return report
+
+
+class LongFile(Dataset):
+    """Treat a long audio file as a dataset and sample fixed-length segments."""
+    def __init__(self, path, seglength, segshift, transform=None):
+        """Instantiate a LongFile dataset."""
+        assert os.path.exists(path), "File does not exist!"
+        self.path = path
+        self.info = audioinfo(self.path)
+        sr = self.info.samplerate
+        self.segshift = int(segshift*sr)
+        assert self.segshift > 1, "Insufficient segshift!"
+        self.seglength = int(seglength*sr)
+
+    def __getitem__(self, idx):
+        idx %= len(self)
+        ns = idx*self.segshift
+        return Audio(*audioread(self.path, frames=self.seglength,
+                                start=ns, fill_value=0))
+
+    def __len__(self):
+        return math.ceil(
+            (self.info.frames - self.seglength) / self.segshift) + 1
+
+
+class LstDataset(Dataset):
+    """A dataset that gets all audio files from a list of file paths."""
+
+    def __init__(self, lst, root=None, read=None, transform=None):
+        """Instantiate an audio dataset.
+False
+        Parameters
+        ----------
+        lst: list(str) or str
+            Each entry should point to a valid file.
+            If a str, assume a file-listing file that has file spath per line.
+
+        Keyword Parameters
+        ------------------
+        root: str, None
+            Root directory of a dataset.
+        sr: int
+            Sampling rate in Hz.
+        read: callable, optional
+            Function to be called on each file path to get the signal.
+            Default to `audioread`.
+        transform: callable, optional
+            Transform to be applied on each sample after read in.
+            Default to None.
+
+        See Also
+        --------
+        datatype.Audio
+
+        """
+        super(LstDataset).__init__()
+        self.root = root
+        if isinstance(lst, list):
+            self._filepaths = lst
+        elif isinstance(lst, str):
+            self._filepaths = [line.rstrip('\n') for line in open(lst)]
+        else:
+            raise NotImplementedError
+        self.customread = read
+        self.transform = transform
+
+    @property
+    def filepaths(self):
+        """Return all valid file paths in a list."""
+        return self._filepaths
+
+    def read(self, path):
+        """Read a single file from path."""
+        if self.customread:
+            return self.customread(path)
+        return Audio(*audioread(path))
+
+    def __len__(self):
+        """Return number of valid audio files."""
+        return len(self._filepaths)
+
+    def __getitem__(self, idx):
+        """Get i-th valid item after reading in and transform."""
+        path = os.path.join(self.root, self._filepaths[idx]) if self.root else\
+            self._filepaths[idx]
+        sample = self.read(path)
         if self.transform:
             sample = self.transform(sample)
 
@@ -186,6 +291,31 @@ class SADDataset(Dataset):
             'sr': sampling rate
             'data': audio waveform
             'active': iterable of speech-active timestamps
+        """
+        raise NotImplementedError
+
+
+class SIDDataset(Dataset):
+    """An abstract dataset class for Speaker IDentification.
+
+    All SID datasets should subclass it.
+
+    See Also
+    --------
+    audlib.data.librispeech.LibriSpeakers
+
+    """
+
+    def spkr2label(self, spkr):
+        """Convert a unique speaker identifier to a unique integer label."""
+        raise NotImplementedError
+
+    def __getitem__(self, index):
+        """Return one sample at current index.
+
+        For a SAD dataset, a sample should at least have:
+            Audio: datatype.Audio
+            speaker: str, int, or any unique identifier
         """
         raise NotImplementedError
 

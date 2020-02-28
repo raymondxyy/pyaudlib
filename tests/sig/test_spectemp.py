@@ -2,12 +2,9 @@
 import numpy as np
 from audlib.quickstart import welcome
 from audlib.sig.window import hamming
-from audlib.sig.transform import stpowspec
+from audlib.sig.transform import stpowspec, stft, istft
 from audlib.sig.fbanks import Gammatone
-from audlib.sig.spectemp import strf
-from audlib.sig.spectemp import pncc
-from audlib.sig.spectemp import ssf
-from audlib.enhance import SSFEnhancer
+from audlib.sig.spectemp import strf, pncc, ssf, invspec
 
 
 def test_ssf():
@@ -15,7 +12,7 @@ def test_ssf():
     lambda_lp = 1
     number_of_gammatone_filters = 40
     number_of_time_steps = 13
-    
+
     gbank = Gammatone(16000, number_of_gammatone_filters)
     powerspec = np.ones((number_of_time_steps, nfft // 2 + 1))
 
@@ -50,7 +47,7 @@ def test_pncc():
     hop = .01
     nfft = 1024
     wind = hamming(int(wlen*sr))
-    powerspec = stpowspec(sig, sr, wind, int(hop*sr), nfft, synth=False)
+    powerspec = stpowspec(sig, wind, int(hop*sr), nfft, synth=False)
     gtbank = Gammatone(sr, 40)
 
     wts = gtbank.gammawgt(nfft, powernorm=True, squared=True)
@@ -64,7 +61,30 @@ def test_pncc():
     return coef
 
 
+def test_invpnspec():
+    # TODO
+    sig, sr = welcome()
+    wlen = .025
+    hop = .01
+    nfft = 1024
+    wind = hamming(int(wlen*sr))
+    spec = stft(sig, wind, hop, nfft, synth=True, zphase=True)
+    pspec = spec.real**2 + spec.imag**2
+    gtbank = Gammatone(sr, 40)
+
+    wts = gtbank.gammawgt(nfft, powernorm=True, squared=True)
+    gammaspec = pspec @ wts
+
+    mask40 = pncc(gammaspec, tempmask=True, synth=True)
+    maskfull = invspec(mask40, wts)
+    sigsynth = istft((maskfull**.5)*spec, wind, hop, nfft, zphase=True)
+
+    return
+
+
 if __name__ == "__main__":
-    #test_strf()
+    test_strf()
     test_pncc()
+    test_ssf()
+    test_invpnspec()
     test_ssf()

@@ -19,7 +19,7 @@ class RandSample(AudioDataset):
     def isaudio(path):
         return path.endswith(('.wav', '.flac', '.sph'))
 
-    def __init__(self, root, minlen=None, maxlen=None, unit='second',
+    def __init__(self, root, minlen=0., maxlen=None, unit='second',
                  filt=None, transform=None, cache=False):
         """Instantiate a random sampling dataset.
 

@@ -14,7 +14,7 @@ def test_mfcc():
     window_length = 0.032
     wind = hamming(int(window_length*sr))
     hop = .25
-    mfcc = stmfcc(sig, sr, wind, hop, nfft, melbank)
+    mfcc = stmfcc(sig, wind, hop, nfft, melbank)
     return mfcc
 
 

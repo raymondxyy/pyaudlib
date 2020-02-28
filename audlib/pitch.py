@@ -32,12 +32,12 @@ class ACF(object):
         """
         super(ACF, self).__init__()
         self.sr = sr
-        self.numframes = lambda sig: numframes(sig, sr, wind, hop, center=True)
+        self.numframes = lambda sig: numframes(sig, wind, hop, center=True)
         self.laglen = len(wind)
 
         def __stacf(sig):
             """Proceed ACF with LPC."""
-            frames = stana(sig, sr, wind, hop, center=True)
+            frames = stana(sig, wind, hop, center=True)
             if not lpc_order:
                 return np.asarray([xcorr(f, norm=True) for f in frames])
             out = np.empty_like(frames)
@@ -99,13 +99,13 @@ class HistoPitch(object):
         super(HistoPitch, self).__init__()
         self.sr = sr
         self.fbank = fbank
-        self.numframes = lambda sig: numframes(sig, sr, wind, hop, center=True)
+        self.numframes = lambda sig: numframes(sig, wind, hop, center=True)
         self.laglen = len(wind)
         self.acf_floor = acf_floor
 
         def __stacf(sig):
             """Proceed ACF with LPC."""
-            frames = stana(sig, sr, wind, hop, center=True)
+            frames = stana(sig, wind, hop, center=True)
             out = np.empty_like(frames)
             if not lpc_order:
                 for ii, frame in enumerate(frames):

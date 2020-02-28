@@ -1,10 +1,14 @@
-"""SPECtral-TEMPoral models for audio signals."""
-import numpy as np
-from scipy.signal import hilbert, lfilter
-from scipy.fftpack import dct, idct
+# coding: utf-8
 
-from .fbanks import Gammatone
-from .util import asymfilt
+"""SPECtral-TEMPoral models for audio signals."""
+import math
+
+import numpy as np
+from scipy.fftpack import dct, idct
+import scipy.signal as signal
+
+from .util import asymfilt, nextpow2
+from .temporal import convdn, conv
 
 
 def ssf(powerspec, lambda_lp, c0=.01, ptype=2, gbank=None, nfft=None):
@@ -18,7 +22,7 @@ def ssf(powerspec, lambda_lp, c0=.01, ptype=2, gbank=None, nfft=None):
     Parameters
     ----------
     powerspec: numpy.ndarray
-        Short-time power spectra. N.B.: This input power spectrum is not 
+        Short-time power spectra. N.B.: This input power spectrum is not
         frequency integrated
     lambda_lp: float
         Time constant to be used as the first-order lowpass filter coefficient.
@@ -46,12 +50,12 @@ def ssf(powerspec, lambda_lp, c0=.01, ptype=2, gbank=None, nfft=None):
     power_spectrum = powerspec
 
     if gbank is not None:
-        assert nfft is not None, 'In order to use Gammatone smoothing, you must specify nfft.'        
+        assert nfft is not None, 'In order to use Gammatone smoothing, you must specify nfft.'
         H = gbank.gammawgt(nfft)
         power_spectrum = np.square(np.abs(power_spectrum @ H))
 
     # Low-pass filtered power
-    mspec = lfilter([1-lambda_lp], [1, -lambda_lp], power_spectrum, axis=0)
+    mspec = signal.lfilter([1-lambda_lp], [1, -lambda_lp], power_spectrum, axis=0)
 
     if ptype == 1:
         ptilde = np.maximum(power_spectrum-mspec, c0*power_spectrum)
@@ -67,7 +71,7 @@ def ssf(powerspec, lambda_lp, c0=.01, ptype=2, gbank=None, nfft=None):
         H = gbank.gammawgt(nfft)
         mu = (w @ np.abs(H).T) / np.sum(np.abs(H), axis=1)
         out = np.multiply(powerspec, mu)
-    
+
     return out
 
 
@@ -119,7 +123,7 @@ def pncc(powerspec, medtime=2, medfreq=4, synth=False,
     else:
         qtild_tm = 0
 
-    # C-D. Track floor of noise floor
+    # C-D. Track floor of high-passed power envelope
     qtild_f = asymfilt(qtild0, .999, .5, zi=.9*qtild0[0])
     qtild1 = np.maximum(qtild_tm, qtild_f)
 
@@ -141,8 +145,11 @@ def pncc(powerspec, medtime=2, medfreq=4, synth=False,
 
     # F. Mean power normalization
     meanpower = out.mean(axis=1)  # T[m]
-    mu, _ = lfilter([1-lambda_mu], [1, -lambda_mu], meanpower,
+    mu, _ = signal.lfilter([1-lambda_mu], [1, -lambda_mu], meanpower,
                     zi=[meanpower.mean()])
+
+    if synth:  # return mask only
+        return stild / mu[:, np.newaxis]
 
     out /= mu[:, np.newaxis]  # U[m,l] in eq.16, ignoring the k constant
 
@@ -160,7 +167,7 @@ def pncc(powerspec, medtime=2, medfreq=4, synth=False,
     return out
 
 
-def pnccspec(powerspec, **kwargs):
+def pnspec(powerspec, **kwargs):
     """Power spectrum derived from Power-Normalized Cepstral Coefficients.
 
     See `pncc` for a complete list of function parameters.
@@ -168,7 +175,28 @@ def pnccspec(powerspec, **kwargs):
     return idct(pncc(powerspec, **kwargs), n=powerspec.shape[1], norm='ortho')
 
 
-def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0):
+def invspec(tkspec, fkwgts):
+    """Invert a short-time spectra or mask with reduced spectral dimensions.
+
+    This is useful when you have a representation like a mel-frequency power
+    spectra and want an **approximated** linear frequency power spectra.
+
+    Parameters
+    ----------
+    tkspec: numpy.ndarray
+        T x K short-time power spectra with compressed spectral dim.
+    fkwgts: numpy.ndarray
+        F x K frequency-weighting matrix used to transform a full power spec.
+
+    Returns
+    -------
+        T x F inverted short-time spectra.
+    """
+    return (tkspec @ fkwgts.T) / fkwgts.sum(axis=1)
+
+
+def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
+         ndft=None):
     """Spectral-temporal response fields for both up and down direction.
 
     Implement the STRF described in Chi, Ru, and Shamma:
@@ -217,12 +245,55 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0):
     hs = _hs(np.linspace(-freq, freq, endpoint=False,
              num=int(2*freq*bins_per_octave)), scale)
     ht = _ht(np.linspace(0, time, endpoint=False, num=int(sr*time)), rate)
-    hsa = hilbert(hs)
-    hta = hilbert(ht)
+    if ndft is None:
+        ndft = max(512, nextpow2(max(len(hs), len(ht))))
+        ndft = max(len(hs), len(ht))
+    assert ndft >= max(len(ht), len(hs))
+    hsa = signal.hilbert(hs, ndft)[:len(hs)]
+    hta = signal.hilbert(ht, ndft)[:len(ht)]
     hirs = hs * np.cos(phi) + hsa.imag * np.sin(phi)
     hirt = ht * np.cos(theta) + hta.imag * np.sin(theta)
-    hirs_ = hilbert(hirs)
-    hirt_ = hilbert(hirt)
-
+    hirs_ = signal.hilbert(hirs, ndft)[:len(hs)]
+    hirt_ = signal.hilbert(hirt, ndft)[:len(ht)]
     return np.outer(hirt_, hirs_).real,\
         np.outer(np.conj(hirt_), hirs_).real
+
+
+def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod, norm=False, original=False):
+    """Modulation spectrogram proposed by Kingsbury et al.
+
+    Implemented Kingsbury, Brian ED, Nelson Morgan, and Steven Greenberg.
+    "Robust speech recognition using the modulation spectrogram."
+    Speech communication 25.1-3 (1998): 117-132.
+
+    Parameters
+    ----------
+    sig: numpy.ndarray
+        Time-domain signal to be processed.
+    sr, fr: int
+        Sampling rate; Frame rate.
+    fbank: fbank.Filterbank
+        A Filterbank object. .filter() must be implemented.
+    """
+    assert len(lpf_mod) % 2, "Modulation filter must have odd number of samples."
+    ss = len(lpf_mod) // 2
+    bpf_mod = lpf_mod * np.exp(1j*2*np.pi*4/fr * np.arange(-ss, ss+1))
+    deci = sr // fr
+    nframes = int(math.ceil(len(sig)/deci))
+    pspec = np.empty((nframes, len(fbank)))
+    if original:
+        pspec_orig = np.empty_like(pspec)
+    for kk, _ in enumerate(fbank):
+        band = fbank.filter(sig, kk)
+        if original:
+            pspec_orig[:, kk] = band[::deci][:nframes]**2
+        banddn = convdn(band.clip(0), lpf_env, deci, True)[:nframes]
+        if norm:  # long-term level normalization
+            banddn /= banddn.mean()
+        banddn = conv(banddn, bpf_mod, True)[:nframes]
+        pspec[:, kk] = banddn.real**2 + banddn.imag**2
+
+    if original:
+        return pspec, pspec_orig
+
+    return pspec
