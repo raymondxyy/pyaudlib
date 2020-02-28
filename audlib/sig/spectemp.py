@@ -11,7 +11,7 @@ from .util import asymfilt, nextpow2
 from .temporal import convdn, conv
 
 
-def ssf(powerspec, lambda_lp, c0=.01, ptype=2, gbank=None, nfft=None):
+def ssf(powerspec, lambda_lp, c0=.01, ptype=2):
     """Suppression of Slowly-varying components and the Falling edge.
 
     This implementation follows paper by Kim and Stern:
@@ -33,10 +33,6 @@ def ssf(powerspec, lambda_lp, c0=.01, ptype=2, gbank=None, nfft=None):
         Power floor constant.
     ptype: int, 2
         SSF processing type; either 1 or 2.
-    gbank: Gammatone Filterbank, None
-        The gammatone filter bank to smooth the power spectrum (see: fbank.Gammatone)
-    nfft: int, None
-        The number of frequency channels used to compute the signal's power spectrum.
 
     Returns
     -------
@@ -47,32 +43,18 @@ def ssf(powerspec, lambda_lp, c0=.01, ptype=2, gbank=None, nfft=None):
         spectrum (i.e., Eq. (9) in Kim, et al.).
 
     """
-    power_spectrum = powerspec
-
-    if gbank is not None:
-        assert nfft is not None, 'In order to use Gammatone smoothing, you must specify nfft.'
-        H = gbank.gammawgt(nfft)
-        power_spectrum = np.square(np.abs(power_spectrum @ H))
 
     # Low-pass filtered power
-    mspec = signal.lfilter([1-lambda_lp], [1, -lambda_lp], power_spectrum, axis=0)
+    mspec = signal.lfilter([1-lambda_lp], [1, -lambda_lp], powerspec, axis=0)
 
     if ptype == 1:
-        ptilde = np.maximum(power_spectrum-mspec, c0*power_spectrum)
+        ptilde = np.maximum(powerspec-mspec, c0*powerspec)
     elif ptype == 2:
-        ptilde = np.maximum(power_spectrum-mspec, c0*mspec)
+        ptilde = np.maximum(powerspec-mspec, c0*mspec)
     else:
         raise ValueError(f"Invalid ptype: [{ptype}]")
 
-    w = ptilde / power_spectrum
-    out = w
-
-    if gbank is not None:
-        H = gbank.gammawgt(nfft)
-        mu = (w @ np.abs(H).T) / np.sum(np.abs(H), axis=1)
-        out = np.multiply(powerspec, mu)
-
-    return out
+    return ptilde / powerspec
 
 
 def pncc(powerspec, medtime=2, medfreq=4, synth=False,

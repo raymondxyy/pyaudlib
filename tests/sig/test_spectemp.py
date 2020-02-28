@@ -7,26 +7,16 @@ from audlib.sig.fbanks import Gammatone
 from audlib.sig.spectemp import strf, pncc, ssf, invspec
 
 
+WELCOME, SR = welcome()
+
+
 def test_ssf():
-    nfft = 1024
-    lambda_lp = 1
-    number_of_gammatone_filters = 40
-    number_of_time_steps = 13
+    powerspec = stpowspec(WELCOME, hamming(int(.025*SR)), .5, 512)
+    wts = Gammatone(SR, 40).gammawgt(512)
 
-    gbank = Gammatone(16000, number_of_gammatone_filters)
-    powerspec = np.ones((number_of_time_steps, nfft // 2 + 1))
-
-    # When gbank is given.
-    ssf_spectrum = ssf(powerspec, lambda_lp, gbank=gbank, nfft=nfft)
-    assert ssf_spectrum.shape[0] == number_of_time_steps, 'returned.shape[0] ({}) does not match {}'.format(ssf_spectrum.shape[0], number_of_time_steps)
-    assert ssf_spectrum.shape[1] == nfft // 2 + 1, 'returned.shape[1] ({}) does not match {}'.format(ssf_spectrum.shape[1], nfft // 2 + 1)
-
-    # When gbank is not given.
-    ssf_spectrum = ssf(powerspec, lambda_lp)
-    assert ssf_spectrum.shape[0] == number_of_time_steps
-    assert ssf_spectrum.shape[1] == nfft // 2 + 1
-
-    return
+    mask = ssf(powerspec @ wts, .4)
+    assert mask.shape[0] == powerspec.shape[0]
+    assert mask.shape[1] == wts.shape[1]
 
 
 def test_strf():
@@ -42,13 +32,12 @@ def test_strf():
 
 
 def test_pncc():
-    sig, sr = welcome()
     wlen = .025
     hop = .01
     nfft = 1024
-    wind = hamming(int(wlen*sr))
-    powerspec = stpowspec(sig, wind, int(hop*sr), nfft, synth=False)
-    gtbank = Gammatone(sr, 40)
+    wind = hamming(int(wlen*SR))
+    powerspec = stpowspec(WELCOME, wind, int(hop*SR), nfft, synth=False)
+    gtbank = Gammatone(SR, 40)
 
     wts = gtbank.gammawgt(nfft, powernorm=True, squared=True)
     gammaspec = powerspec @ wts
@@ -63,14 +52,13 @@ def test_pncc():
 
 def test_invpnspec():
     # TODO
-    sig, sr = welcome()
     wlen = .025
     hop = .01
     nfft = 1024
-    wind = hamming(int(wlen*sr))
-    spec = stft(sig, wind, hop, nfft, synth=True, zphase=True)
+    wind = hamming(int(wlen*SR))
+    spec = stft(WELCOME, wind, hop, nfft, synth=True, zphase=True)
     pspec = spec.real**2 + spec.imag**2
-    gtbank = Gammatone(sr, 40)
+    gtbank = Gammatone(SR, 40)
 
     wts = gtbank.gammawgt(nfft, powernorm=True, squared=True)
     gammaspec = pspec @ wts

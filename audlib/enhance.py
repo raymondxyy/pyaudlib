@@ -16,7 +16,7 @@ from .sig.stproc import stana, ola
 from .sig.fbanks import Gammatone
 from .sig.temporal import lpc_parcor, ref2pred
 from .sig.transform import stft, istft, stpsd
-from .sig.spectemp import ssf
+from .sig.spectemp import ssf, invspec
 from .noise import mmse_henriks as npsd_henriks
 
 
@@ -33,7 +33,7 @@ class SSFEnhancer(object):
     spectemp.ssf
 
     """
-    def __init__(self, sr, wind, hop, nfft, num_chan=40, c0=.01, ptype=2):
+    def __init__(self, sr, wind, hop, nfft, num_chan=40):
         """Instantiate an SSF enhancer.
 
         Parameters
@@ -55,30 +55,35 @@ class SSFEnhancer(object):
             SSF type. Default to 2.
 
         """
-        gbank = Gammatone(sr, num_chan, (130., 4500.))
+        assert sr > 9000, "Sampling rate too low!"
+        self.gbank = Gammatone(sr, num_chan, (130., 4500.))
+        self.gammawgt = self.gbank.gammawgt(nfft)
 
         def _stft(sig):
-            return stft(sig, sr, wind, hop, nfft, synth=True, zphase=True)
+            return stft(sig, wind, hop, nfft, synth=True, zphase=True)
 
-        def _ssf(sigspec):
-            return ssf(sigspec, .4*16000/sr, c0=c0, ptype=ptype, gbank=gbank, nfft=nfft)
+        def _istft(spec):
+            return istft(spec, wind, hop, nfft, zphase=True)
 
-        self._ssf = _ssf
-        self._stft = _stft
+        self.stft = _stft
+        self.istft = _istft
 
 
-    def __call__(self, sig, pre_emphasis=True):
+    def __call__(self, sig, lambda_lp, c0=.01, ptype=2, pre_emphasis=True):
         """Enhance a signal with SSF."""
         if pre_emphasis:
             sig = lfilter([1, -.97], [1], sig)
 
-        sigspec = self._stft(sig)
-        out = self._ssf(sigspec)
+        sigspec = self.stft(sig)
+        gpmask = ssf((sigspec.real**2 + sigspec.imag**2) @ self.gammawgt,
+                     lambda_lp, c0, ptype)
+        pmask = invspec(gpmask, self.gammawgt)
+        out = self.istft(np.sqrt(pmask) * sigspec)
 
         if pre_emphasis:
-            sig = lfilter([1], [1, -.97], out)
+            out = lfilter([1], [1, -.97], out)
 
-        return sig
+        return out
 
 
 def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3,
