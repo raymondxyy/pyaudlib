@@ -241,7 +241,8 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
         np.outer(np.conj(hirt_), hirs_).real
 
 
-def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod, norm=False, original=False):
+def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod, fc_mod=4, norm=False,
+            original=False):
     """Modulation spectrogram proposed by Kingsbury et al.
 
     Implemented Kingsbury, Brian ED, Nelson Morgan, and Steven Greenberg.
@@ -259,7 +260,7 @@ def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod, norm=False, original=False):
     """
     assert len(lpf_mod) % 2, "Modulation filter must have odd number of samples."
     ss = len(lpf_mod) // 2
-    bpf_mod = lpf_mod * np.exp(1j*2*np.pi*4/fr * np.arange(-ss, ss+1))
+    bpf_mod = lpf_mod * np.exp(1j*2*np.pi*fc_mod/fr * np.arange(-ss, ss+1))
     deci = sr // fr
     nframes = int(math.ceil(len(sig)/deci))
     pspec = np.empty((nframes, len(fbank)))
