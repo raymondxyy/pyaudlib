@@ -241,6 +241,26 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
         np.outer(np.conj(hirt_), hirs_).real
 
 
+def strf_gabor(supn, supk, wn, wk):
+    """Spectrotemporal receptive fields implemented using the Gabor filters.
+
+    This implementation follows the work of Schadler et al. in
+    Schadler, Marc René, Bernd T. Meyer, and Birger Kollmeier. "Spectro-temporal
+    modulation subspace-spanning filter bank features for robust automatic
+    speech recognition."
+    The Journal of the Acoustical Society of America 131.5 (2012): 4134-4151.
+    """
+    n0 = supn // 2
+    k0 = supk // 2
+    nspan = np.arange(supn)
+    kspan = np.arange(supk)
+    nsin = np.exp(1j * wn*(nspan-n0))
+    ksin = np.exp(1j * wk*(kspan-k0))
+    nwind = .5 - .5 * np.cos(2*np.pi*nspan/(supn+1))
+    kwind = .5 - .5 * np.cos(2*np.pi*kspan/(supk+1))
+    return np.outer(nsin * nwind, ksin * kwind)
+
+
 def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod, fc_mod=4, norm=False,
             original=False):
     """Modulation spectrogram proposed by Kingsbury et al.

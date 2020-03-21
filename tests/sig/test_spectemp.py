@@ -27,7 +27,13 @@ def test_strf():
     phi, theta = 0.5, 0
     kdn, kup = strf(time_support, freq_support, frate, bins_per_octave,
                     phi=phi*np.pi, theta=theta*np.pi)
+    return
 
+
+def test_strf_gabor():
+    # TODO: real test case
+    from audlib.sig.spectemp import strf_gabor
+    gabor = strf_gabor(40, 20, 0.2*np.pi, .3*np.pi)
     return
 
 
@@ -71,8 +77,8 @@ def test_invpnspec():
 
 
 if __name__ == "__main__":
-    test_strf()
-    test_pncc()
-    test_ssf()
-    test_invpnspec()
-    test_ssf()
+    #test_strf()
+    #test_pncc()
+    #test_ssf()
+    #test_invpnspec()
+    test_strf_gabor()
