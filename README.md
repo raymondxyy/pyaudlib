@@ -25,6 +25,8 @@ audlib focuses on correctness, efficiency, and simplicity. Signal processing fun
 
 ## Breaking Changes
 
+- 0.0.3
+  - `transform.stlogm` is removed
 - 0.0.2
   - `audioread` follows the interface of `soundfile.read`
   - `audiowrite` follows the interface of `soundfile.write`
