@@ -62,12 +62,14 @@ More extensive examples can be found in `examples/`.
 
 ## Release history
 
-- 0.0.1
-  - First release on PyPI
+- 0.0.3
+  - First release of the command-line tool *audpipe*
 - 0.0.2
   - Streamlines optional installation
   - Improves API (**see breaking changes**)
   - Adds coverage test
+- 0.0.1
+  - First release on PyPI
 
 ## Authors
 

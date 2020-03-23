@@ -1,4 +1,4 @@
-"""Frame-level frequency-domain processing."""
+"""SPECTRAL-domain processing."""
 import math
 
 import numpy as np
@@ -27,7 +27,7 @@ def magphase(cspectrum, unwrap=False):
     return mag, phs
 
 
-def logmag(sig, floor=-80.):
+def logmag(sig, floor=-160.):
     """Compute natural log magnitude of complex spectrum.
 
     Parameters
@@ -38,13 +38,7 @@ def logmag(sig, floor=-80.):
         Magnitude floor in dB.
 
     """
-    eps = 10**(floor/20)
-    sigmag = np.abs(sig)
-    smallmag = sigmag < eps
-    sigmag[smallmag] = np.log(eps)
-    sigmag[~smallmag] = np.log(sigmag[~smallmag])
-
-    return sigmag
+    return np.log(np.abs(sig).clip(10**(floor/20)))
 
 
 def logpow(sig, floor=-80.):
@@ -58,13 +52,7 @@ def logpow(sig, floor=-80.):
         Magnitude floor in dB.
 
     """
-    eps = 10**(floor/10)
-    sigpow = sig.real**2 + sig.imag**2
-    smallpower = sigpow < eps
-    sigpow[smallpower] = np.log(eps)
-    sigpow[~smallpower] = np.log(sigpow[~smallpower])
-
-    return sigpow
+    return np.log((sig.real**2+sig.imag**2).clip(10**(floor/10)))
 
 
 def phasor(mag, phase):

@@ -3,6 +3,7 @@ import numpy as np
 import scipy.signal as signal
 
 from .spectemp import pncc, modspec
+from .spectral import logpow
 from .window import hamming
 from .transform import stft
 from .fbanks import Gammatone, ConstantQ, MelFreq
@@ -21,7 +22,7 @@ class STFT(object):
     def __call__(self, sig):
         """Return the log power spectra."""
         spec = self.forward(sig)
-        return np.log((spec.real**2+spec.imag**2).clip(1e-8))
+        return logpow(spec)
 
 
 class CQT(object):
@@ -33,7 +34,7 @@ class CQT(object):
     def __call__(self, sig):
         """Return the log power spectra."""
         spec = self.fbank.cqt(sig, self.fr)
-        return np.log((spec.real**2 + spec.imag**2).clip(1e-8))
+        return logpow(spec)
 
 
 class GammatoneSpec(object):

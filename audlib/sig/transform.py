@@ -16,7 +16,6 @@ from numpy.fft import rfft, irfft
 from scipy.fftpack import dct
 
 from .stproc import numframes, stana, ola
-from .spectral import logmag
 from .temporal import xcorr
 from .cepstral import rcep_dft, ccep_zt
 
@@ -126,22 +125,6 @@ def stmfcc(sig, wind, hop, nfft, melbank, synth=False):
     return dct(
         np.log(stmelspec(sig, wind, hop, nfft, melbank, synth=synth)),
         norm='ortho')
-
-
-def stlogm(sig, wind, hop, nfft, synth=False, floor=-80.):
-    """Short-time Log Magnitude Spectrum.
-
-    Implement short-time log magnitude spectrum. Discrete frequency bins that
-    have 0 magnitude are rounded to `floor` log magnitude. See `stft` for
-    complete documentation for each parameter.
-
-    See Also
-    --------
-    stft
-
-    """
-    return logmag(stft(sig, wind, hop, nfft, synth=synth, zphase=False),
-                  floor=floor)
 
 
 def strcep(sig, wind, hop, n, synth=False, nfft=4096, floor=-80.):
