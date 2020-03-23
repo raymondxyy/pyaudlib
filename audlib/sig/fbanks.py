@@ -9,6 +9,7 @@ from .auditory import hz2mel, mel2hz
 from .auditory import erb_space, erb_filters, erb_fbank, erb_freqz
 from .window import hamming
 from .temporal import convdn, conv
+from .spectral import logmag
 
 
 class Filterbank(object):
@@ -192,9 +193,12 @@ class MelFreq(Filterbank):
         """Return the mel spectrum of a signal."""
         return powerspec @ self.wgts
 
-    def mfcc(self, powerspec):
+    def mfcc(self, powerspec, mean_norm=True):
         """Return mel-frequency cepstral coefficients (MFCC)."""
-        return dct(np.log(self.melspec(powerspec)), norm='ortho')
+        cep = dct(logmag(self.melspec(powerspec)), norm='ortho')
+        if mean_norm:
+            cep -= cep.mean(axis=0)
+        return cep
 
 
 class Gammatone(Filterbank):

@@ -43,6 +43,11 @@ setup(
         'scipy >= 1.3.1',
         'resampy >= 0.2.2',
     ],
+    entry_points={
+        'console_scripts': [
+            'audpipe = audlib.cli.audpipe:cli',
+        ],
+    },
     extras_require={
         'tests': [
             'pytest >= 5.1.3',
