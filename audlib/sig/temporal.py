@@ -262,7 +262,7 @@ def lpc_atc(sig, order, levinson=True, stable=True):
     alphas: numpy.ndarray
         `order`-point LPC coefficients: [a1, a2, ..., ap].
         The all-pole filter can be reconstructed from the diff eq:
-            y[n] = G*x[n] + a1*y[n-1] + a2*y[n-2] + ... + ap*y[n-p]
+        y[n] = G*x[n] + a1*y[n-1] + a2*y[n-2] + ... + ap*y[n-p]
     gain: float
         Filter gain.
 

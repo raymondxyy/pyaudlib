@@ -12,6 +12,14 @@ audlib.sig.auditory module
    :undoc-members:
    :show-inheritance:
 
+audlib.sig.callables module
+---------------------------
+
+.. automodule:: audlib.sig.callables
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 audlib.sig.cepstral module
 --------------------------
 

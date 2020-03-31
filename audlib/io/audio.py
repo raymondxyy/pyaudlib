@@ -69,7 +69,7 @@ class SphereInfo(object):
 
     A sphere header looks like the following:
     NIST_1A
-       1024
+    ---1024
     sample_count -i 143421600
     sample_n_bytes -i 2
     channel_count -i 2
@@ -197,8 +197,8 @@ def chk_duration(path, minlen=None, maxlen=None, unit='second'):
     unit: str, optional
         The unit in which `minlen` and `maxlen` are interpreted.
         Options are:
-            - 'second' (default)
-            - 'sample'
+        - 'second' (default)
+        - 'sample'
 
     Returns
     -------
@@ -258,8 +258,8 @@ def randsel(path, minlen=0, maxlen=None, unit="second"):
     unit: str, optional
         The unit in which `minlen` and `maxlen` are interpreted.
         Options are:
-            - 'second' (default)
-            - 'sample'
+        - 'second' (default)
+        - 'sample'
 
     Returns
     -------

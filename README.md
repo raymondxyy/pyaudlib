@@ -57,6 +57,7 @@ python -m pytest tests
 1. Bump version in setup.py.
 2. Package release: `python setup.py sdist bdist_wheel`
 3. Upload release: `twine upload --repository-url https://upload.pypi.org/legacy/ dist/*`
+4. Update documentation: `cd docs && sphinx-apidoc -f -o source/ ../audlib/ && make html`
 
 ## Usage example
 

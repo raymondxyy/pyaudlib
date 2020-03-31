@@ -57,8 +57,9 @@ class SERATS_SAD(SEDataset):
         │   ├── audio
         │   └── sad
         └── aligned-train
-            ├── audio
-            └── sad
+        |---├── audio
+        |---└── sad
+
     """
 
     def __init__(self, root, subset='dev-1', channels='AH', select=None,

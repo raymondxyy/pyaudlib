@@ -9,10 +9,10 @@ class SpoofedAudio(Audio):
     """A data structure for spoofed audio.
 
     attacktype can only be one of the following:
-        - None --> genuine audio
-        - 'r' --> replay attack
-        - 's' --> speech synthesis attack
-        - 'c' --> voice conversion attack
+    - None --> genuine audio
+    - 'r' --> replay attack
+    - 's' --> speech synthesis attack
+    - 'c' --> voice conversion attack
     """
     __slots__ = "attacktype"
 

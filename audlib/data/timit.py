@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """Datasets derived from the TIMIT dataset for phoneme recognition."""
 import os
 from random import randrange
@@ -28,9 +30,9 @@ def phnread(path):
 
     Format: <BEGIN-SAMPLE> <ENDING-SAMPLE> <PHONE>
     Example:
-        0 3050 h#
-        3050 4559 sh
-        4559 5723 ix
+    0 3050 h#
+    3050 4559 sh
+    4559 5723 ix
     """
     try:
         seq = []
@@ -49,7 +51,7 @@ def txtread(path):
 
     Format: <BEGIN-SAMPLE> <END-SAMPLE> <TRANSCRIPT>
     Example:
-        0 46797 She had your dark suit in greasy wash water all year.
+    0 46797 She had your dark suit in greasy wash water all year.
     """
     try:
         with open(path) as fp:
@@ -118,25 +120,15 @@ class TIMIT(AudioDataset):
     ├── CONVERT
     ├── SPHERE
     └── TIMIT
-        ├── DOC
-        ├── TEST
-        │   ├── DR1
-        │   ├── DR2
-        │   ├── DR3
-        │   ├── DR4
-        │   ├── DR5
-        │   ├── DR6
-        │   ├── DR7
-        │   └── DR8
-        └── TRAIN
-            ├── DR1
-            ├── DR2
-            ├── DR3
-            ├── DR4
-            ├── DR5
-            ├── DR6
-            ├── DR7
-            └── DR8
+    |---├── DOC
+    |---├── TEST
+    |---│   ├── DR1
+    |---│   ├── DR2
+    ...
+    |---└── TRAIN
+    |------ ├── DR1
+    ...
+
     """
     @classmethod
     def isaudio(cls, path):
@@ -369,8 +361,8 @@ def randselwave(sample, minlen=0, maxlen=None, nosilence=True):
 def randselphon(sample, phonfunc=None):
     """Randomly select the waveform corresponding to a single phone.
 
-    Keyword Parameters
-    ------------------
+    Parameters
+    ----------
     phonfunc: callable(str) -> bool, None
         A filter function on phone.
 

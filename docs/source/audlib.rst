@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
 
    audlib.asr
+   audlib.cli
    audlib.data
    audlib.eval
    audlib.io

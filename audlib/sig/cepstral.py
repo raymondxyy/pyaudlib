@@ -8,7 +8,7 @@ from .spectral import magphase, logmag
 
 
 def clog(cspec, floor=-80.):
-    r"""Complex logarithm defined as log(X) = log(|X|)+j\angle(X).
+    r"""Complex logarithm defined as log(X) = log(abs(X))+j\angle(X).
 
     Parameters
     ----------
@@ -72,8 +72,8 @@ def unwrap(czeros, rzeros, n):
 def roots(sig):
     """Find the roots of a finite-duration real signal.
 
-    Keyword Parameters
-    ------------------
+    Parameters
+    ----------
     trim0: bool, False
         Trim zeros at the beginning or the end?
 

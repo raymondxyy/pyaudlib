@@ -1,13 +1,4 @@
 """Speech enhancement utilities."""
-# Change log:
-#   09/07/17:
-#       * Create this file
-#       * Added iterative Wiener filtering
-#   11/26/17:
-#       * Added A-Priori SNR estimation for Wiener filtering
-#   01/01/19:
-#       * Cleaned up to conform to new interface
-
 import numpy as np
 from numpy.fft import rfft, irfft
 from scipy.signal import lfilter
@@ -169,9 +160,9 @@ def asnr(x, sr, wind, hop, nfft, noise=None, zphase=True, snrsmooth=.98,
 
     Code based on Loizou's matlab implementation. Three suppression rules are
     available:
-        1. Wiener (default)
-        2. Spectral subtraction
-        3. Maximum Likelihood
+    1. Wiener (default)
+    2. Spectral subtraction
+    3. Maximum Likelihood
 
     Parameters
     ----------
@@ -232,7 +223,7 @@ def asnr_spec(noisyspec, snrsmooth=.98, noisesmooth=.98, llkthres=.15,
     This is very similar to `asnr`, except it's computed directly on noisy
     magnitude spectra instead of time-domain signals.
 
-    Outputs
+    Returns
     -------
     xfilt: ndarray
         Filtered magnitude spectrogram.
@@ -282,10 +273,10 @@ def asnr_activate(x, sr, wind, hop, nfft, noise=None, zphase=True,
     This implementation should be identital to asnr, except the estimation of
     mu is interpreted as an activation function. The activation function could
     be one of the following:
-        * classic  - hard thresholding
-        * step     - frequency-dependent hard thresholding
-        * linear   - frequency-dependent piecewise linear
-        * logistic - frequency-dependent logistic function
+    * classic  - hard thresholding
+    * step     - frequency-dependent hard thresholding
+    * linear   - frequency-dependent piecewise linear
+    * logistic - frequency-dependent logistic function
     """
     eps = 1e-16
 

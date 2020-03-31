@@ -2,14 +2,6 @@
 
 This module contains both the pilot wsj0 and full wsj1 datasets.
 You MUST have the data on disk in order to use it.
-
-Supported dataset formats:
-    WSJ0 - generic WSJ0; offering audio samples
-    ASRWSJ0 - WSJ0 for automatic speech recognition;
-              offering audio samples, transcripts, labels
-    WSJ1 - generic WSJ1; offering audio samples
-    ASRWSJ1 - WSJ1 for automatic speech recognition;
-              offering audio samples, transcripts, labels
 """
 import glob
 import os

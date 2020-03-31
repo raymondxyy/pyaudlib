@@ -17,11 +17,11 @@ def magresp(freq, resp, ax, units=('rad', 'db')):
     units : tuple of str, optional
         specify plotting units for x-axis and y-axis, respectively.
         Avalable options for x-axis:
-            * 'rad' (discrete frequency in radians/sample, default)
-            * 'hz' (physical frequency in Hz)
+        * 'rad' (discrete frequency in radians/sample, default)
+        * 'hz' (physical frequency in Hz)
         Available options for y-axis:
-            * 'db' (20*log10(|mag|), default)
-            * 'mag' (absolute magnitude)
+        * 'db' (20*log10(abs(mag)), default)
+        * 'mag' (absolute magnitude)
 
     """
     fu, ru = units

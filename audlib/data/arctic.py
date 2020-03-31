@@ -26,10 +26,10 @@ class ARCTIC(AudioDataset):
     │   ├── orig  <-- wav directory with audio in chan1 and egg in chan2
     │   └── README
     └── cmu_us_slt_arctic  <-- speaker slt
-        ├── COPYING
-        ├── etc
-        ├── orig
-        └── README
+    |---├── COPYING
+    |---├── etc
+    |---├── orig
+    |---└── README
     """
     def __init__(self, root, egg=False, filt=None, transform=None):
         """Instantiate an ARCTIC dataset.

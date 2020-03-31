@@ -53,11 +53,12 @@ def s3write(path, feat):
     """
     Write numpy array to file in SPHINX-3 (s3) format.
 
-    Arguments:
-        path: string
-            Absolute path to feature file on disk
-        feat: 1D ndarray
-            Feature array (only 2D array is supported)
+    Parameters
+    ----------
+    path: string
+        Absolute path to feature file on disk
+    feat: 1D ndarray
+        Feature array (only 2D array is supported)
     """
     tot_nums = feat.size
     with open(path, 'wb') as fp:
@@ -66,11 +67,9 @@ def s3write(path, feat):
 
 
 def s3view(feat):
-    """
-    Simple printing utility similar to SPHINX's cepview. Print some feature
+    """Simple printing utility similar to SPHINX's cepview. Print some feature
     values on screen.
-    Args:
-        feat - feature in numpy array
+
     """
     MAXROW = 10
     MAXCOL = 10
