@@ -1,24 +1,29 @@
 """Test suite for TIMIT."""
 import os
 import pytest
-from audlib.data.timit import TIMIT, utt_no_shorter_than, randselwave, \
-    randselphon, isvowel
+from audlib.data.timit import TIMIT_ASR, TIMIT_SID
 
 
 @pytest.mark.skipif('TIMIT_ROOT' not in os.environ,
                     reason='ENV $TIMIT_ROOT unspecified.')
-def test_timit():
-    #TODO
-    SI = TIMIT(os.environ['TIMIT_ROOT'],
-               filt=lambda p: 'SI' in os.path.basename(p).upper() and
-                              utt_no_shorter_than(p, 5),
-               transform=randselwave)
-    sample = SI[0]
-    print(sample)
+def test_timit_asr():
+    dataset = TIMIT_ASR(os.environ['TIMIT_ROOT'], 'train')
+    assert len(dataset) == 4620
+    dataset = TIMIT_ASR(os.environ['TIMIT_ROOT'], 'core-test')
+    assert len(dataset) == 192
+    dataset = TIMIT_ASR(os.environ['TIMIT_ROOT'], 'complete-test')
+    assert len(dataset) == 1344
 
-    SI = TIMIT(os.environ['TIMIT_ROOT'],
-               filt=lambda p: 'SI' in os.path.basename(p).upper() and
-                              utt_no_shorter_than(p, 5),
-               transform=lambda s: randselphon(s, isvowel))
-    sample = SI[0]
-    print(sample)
+
+@pytest.mark.skipif('TIMIT_ROOT' not in os.environ,
+                    reason='ENV $TIMIT_ROOT unspecified.')
+def test_timit_sid():
+    dataset = TIMIT_SID(os.environ['TIMIT_ROOT'])
+    assert len(dataset) == 4620
+    dataset = TIMIT_SID(os.environ['TIMIT_ROOT'], False)
+    assert len(dataset) == 1680
+
+
+if __name__ == '__main__':
+    test_timit_asr()
+    test_timit_sid()

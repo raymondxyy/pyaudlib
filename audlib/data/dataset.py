@@ -56,12 +56,10 @@ class Dataset(object):
 class AudioDataset(Dataset):
     """A dataset that gets all audio files from a directory."""
 
-    @staticmethod
-    def isaudio(path):
+    def isaudio(self, path):
         return path.endswith(('.wav', '.flac', '.sph'))
 
-    @staticmethod
-    def read(path):
+    def read(self, path):
         """Read audio and put in an Audio object."""
         return Audio(*audioread(path))
 
@@ -94,7 +92,8 @@ class AudioDataset(Dataset):
         self.root = root
         self._filepaths = lsfiles(root, filt=filt if filt else self.isaudio,
                                   relpath=True)
-        self.customread = read
+        if read is not None:
+            self.read = read
         self.transform = transform
 
     @property
@@ -108,12 +107,7 @@ class AudioDataset(Dataset):
 
     def __getitem__(self, idx):
         """Get i-th valid item after reading in and transform."""
-        if self.customread:
-            sample = self.customread(
-                os.path.join(self.root, self._filepaths[idx]))
-        else:
-            sample = self.read(
-                os.path.join(self.root, self._filepaths[idx]))
+        sample = self.read(os.path.join(self.root, self._filepaths[idx]))
 
         if self.transform:
             sample = self.transform(sample)
