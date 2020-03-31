@@ -1,6 +1,8 @@
 # audlib
 
+[![PyPI version](https://badge.fury.io/py/audlib.svg)](https://badge.fury.io/py/audlib)
 [![Build Status](https://travis-ci.com/raymondxyy/pyaudlib.svg?token=xNuzdfgseSXz1yHDnh9L&branch=master)](https://travis-ci.org/raymondxyy/pyaudlib)
+[![Coverage](https://codecov.io/gh/raymondxyy/pyaudlib/branch/master/graph/badge.svg?token=vMLw7Y9H5m)](https://codecov.io/gh/raymondxyy/pyaudlib)
 
 > A speech signal processing library in Python with emphasis on deep learning.
 
@@ -20,6 +22,15 @@ Some use cases of audlib are:
 - Quickly try out speech processors and visualize the spectrogram in command line
 
 audlib focuses on correctness, efficiency, and simplicity. Signal processing functionalities are mathematically checked whenever possible (e.g. constant overlap-add, `istft(stft(X))==X`). Deep neural networks follow the [PyTorch][pytorch]'s convention.
+
+## Breaking Changes
+
+- 0.0.3
+  - `transform.stlogm` is removed
+- 0.0.2
+  - `audioread` follows the interface of `soundfile.read`
+  - `audiowrite` follows the interface of `soundfile.write`
+  - The argument `sr` is removed from all short-time transforms
 
 ## Installation
 
@@ -53,8 +64,13 @@ More extensive examples can be found in `examples/`.
 
 ## Release history
 
+- 0.0.3
+  - First release of the command-line tool *audpipe*
+- 0.0.2
+  - Streamlines optional installation
+  - Improves API (**see breaking changes**)
+  - Adds coverage test
 - 0.0.1
-  - Work in progress
   - First release on PyPI
 
 ## Authors

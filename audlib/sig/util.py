@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """Utility functions related to audio processing."""
 
 import numpy as np
@@ -143,34 +145,6 @@ def ispow2(n):
     return ((n & (n - 1)) == 0) and n != 0
 
 
-def sample(x, length, num, verbose=False):
-    """Given audio x, sample `num` segments with `length` samples each."""
-    assert len(x) >= length
-    segs = []
-    start_idx_max = len(x)-length
-    start_idx = np.around(rand.rand(num) * start_idx_max)
-    for i in start_idx:
-        segs.append(x[int(i):int(i)+length])
-        if verbose:
-            print('Take samples {} to {}...'.format(str(i), str(i+length)))
-    return segs
-
-
-def sample_pair(x, y, length, num, verbose=False):
-    """Sample a pair of signals."""
-    maxlength = min(len(x), len(y))
-    assert maxlength >= length
-    xsegs, ysegs = [], []
-    start_idx_max = maxlength-length
-    start_idx = np.around(rand.rand(num) * start_idx_max)
-    for i in start_idx:
-        xsegs.append(x[int(i):int(i)+length])
-        ysegs.append(y[int(i):int(i)+length])
-        if verbose:
-            print('Take samples {} to {}...'.format(str(i), str(i+length)))
-    return xsegs, ysegs
-
-
 def add_noise(x, n, snr=None):
     """Add user provided noise n with SNR=snr and signal x."""
     noise = additive_noise(x, n, snr=snr)
@@ -227,11 +201,6 @@ def white_noise(x, snr=None):
     nscale = np.sqrt(xe/(10**(snr/10.)) / ne)  # scaling factor
 
     return nscale*n
-
-
-def normalize(x):
-    """Normalize signal amplitude to be in range [-1,1]."""
-    return x/np.max(np.abs(x))
 
 
 def add_white_noise_rand(x):

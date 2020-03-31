@@ -17,8 +17,8 @@ class ZCREnergy(object):
     def __init__(self, sr, wind, hop):
         """Instantiate a ZCREnergy class."""
         super(ZCREnergy, self).__init__()
-        self.numframes = lambda sig: numframes(sig, sr, wind, hop, center=True)
-        self.stana = lambda sig: stana(sig, sr, wind, hop, center=True)
+        self.numframes = lambda sig: numframes(sig, wind, hop, center=True)
+        self.stana = lambda sig: stana(sig, wind, hop, center=True)
 
     def zcre(self, sig, lpc_order=0):
         """Compute the ratio of zero-crossing rate and energy of a signal."""
@@ -43,22 +43,16 @@ class SpectralEnergy(object):
 
     """
 
-    def __init__(self, sr, nfft, fmin=300., fmax=4500.):
-        """Instantiate a VAD class.
+    def __init__(self, mask=None):
+        """Instantiate a VAD based on spectral energy with frequency mask.
 
         Keyword Parameters
         ------------------
-        fmin: float, 300
-            Minimum frequency from which energy is collected.
-        fmax: float, 4500
-            Maximum frequency from which energy is collected.
+        mask: list or numpy.ndarray, None
+            Frequency indices that will be included for energy calculation.
 
         """
-        assert (fmin > 0) and (fmin < fmax) and (fmax < sr/2)
-        fintv = sr / nfft
-        self.bmin = int(fmin//fintv)
-        self.bmax = int(min(fmax//fintv, nfft//2))  # inclusive
-        self.nfft = nfft
+        self.mask = mask
 
     def __call__(self, pspec, dbfloor=-30., smoothframes=0):
         """Detect speech-active frames from a power spectra.
@@ -71,8 +65,10 @@ class SpectralEnergy(object):
             Number of frames to apply a moving-average filter on power contour.
 
         """
-        assert pspec.shape[1] == (self.nfft//2+1), "Incompatible dimension."
-        pspec = pspec[:, self.bmin:self.bmax+1].sum(axis=1)
+        if self.mask is not None:
+            pspec = pspec[:, self.mask].sum(axis=1)
+        else:
+            pspec = pspec.sum(axis=1)
         if smoothframes > 0:
             pspec = lfilter(1/smoothframes * np.ones(smoothframes), 1, pspec)
         return pspec > (10**(dbfloor/10))*pspec.max()

@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """Datasets derived from the CMU ARCTIC datbase.
 
 According to the authors, The CMU_ARCTIC databases were constructed at the
@@ -29,15 +31,13 @@ class ARCTIC(AudioDataset):
         ├── orig
         └── README
     """
-    def __init__(self, root, sr=None, egg=False, filt=None, transform=None):
+    def __init__(self, root, egg=False, filt=None, transform=None):
         """Instantiate an ARCTIC dataset.
 
         Parameters
         ----------
         root: str
             The root directory of WSJ0.
-        sr: int
-            Sampling rate. ARCTIC is recorded at 32kHz.
         egg: bool
             Include the EGG signal at channel 2.
         transform: callable(AudioPitch) -> AudioPitch
@@ -56,7 +56,7 @@ class ARCTIC(AudioDataset):
         """
         def _audioread(path):
             """Read audio as specified by user."""
-            sig, ssr = audioread(path, sr=sr)
+            sig, ssr = audioread(path)
             if egg:
                 out = AudioPitch(sig[0], ssr, egg=sig[1])
             else:
@@ -65,10 +65,9 @@ class ARCTIC(AudioDataset):
             return out
         super(ARCTIC, self).__init__(root, filt=filt, read=_audioread,
                                      transform=transform)
-        self.sr = sr
 
     def __repr__(self):
         """Representation of ARCTIC."""
-        return r"""{}({}, sr={}, egg={}, transform={})
-        """.format(self.__class__.__name__, self.root, self.sr, self.egg,
+        return r"""{}({}, egg={}, transform={})
+        """.format(self.__class__.__name__, self.root, self.egg,
                    self.filt, self.transform)

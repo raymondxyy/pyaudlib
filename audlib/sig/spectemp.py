@@ -1,9 +1,60 @@
+# coding: utf-8
+
 """SPECtral-TEMPoral models for audio signals."""
+import math
+
 import numpy as np
-from scipy.signal import hilbert, lfilter
 from scipy.fftpack import dct, idct
+import scipy.signal as signal
 
 from .util import asymfilt, nextpow2
+from .temporal import convdn, conv
+
+
+def ssf(powerspec, lambda_lp, c0=.01, ptype=2):
+    """Suppression of Slowly-varying components and the Falling edge.
+
+    This implementation follows paper by Kim and Stern:
+    Kim, Chanwoo, and Richard M. Stern."Nonlinear enhancement of onset
+    for robust speech recognition." Eleventh Annual Conference of the
+    International Speech Communication Association. 2010.
+
+    Parameters
+    ----------
+    powerspec: numpy.ndarray
+        Short-time power spectra. N.B.: This input power spectrum is not
+        frequency integrated
+    lambda_lp: float
+        Time constant to be used as the first-order lowpass filter coefficient.
+
+    Keyword Parameters
+    ------------------
+    c0: float, 0.01
+        Power floor constant.
+    ptype: int, 2
+        SSF processing type; either 1 or 2.
+
+    Returns
+    -------
+    out: numpy.ndarray
+        If gbank is not specified, this function outputs the ratio
+        of processed power to original power (i.e., Eq. (6) in Kim, et al.).
+        If gbank is specified, this function outputs the reconstructed
+        spectrum (i.e., Eq. (9) in Kim, et al.).
+
+    """
+
+    # Low-pass filtered power
+    mspec = signal.lfilter([1-lambda_lp], [1, -lambda_lp], powerspec, axis=0)
+
+    if ptype == 1:
+        ptilde = np.maximum(powerspec-mspec, c0*powerspec)
+    elif ptype == 2:
+        ptilde = np.maximum(powerspec-mspec, c0*mspec)
+    else:
+        raise ValueError(f"Invalid ptype: [{ptype}]")
+
+    return ptilde / powerspec
 
 
 def pncc(powerspec, medtime=2, medfreq=4, synth=False,
@@ -76,7 +127,7 @@ def pncc(powerspec, medtime=2, medfreq=4, synth=False,
 
     # F. Mean power normalization
     meanpower = out.mean(axis=1)  # T[m]
-    mu, _ = lfilter([1-lambda_mu], [1, -lambda_mu], meanpower,
+    mu, _ = signal.lfilter([1-lambda_mu], [1, -lambda_mu], meanpower,
                     zi=[meanpower.mean()])
 
     if synth:  # return mask only
@@ -156,7 +207,7 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
     theta: float
         Orientation of time evolution in radians.
 
-    """    
+    """
     def _hs(x, scale):
         """Construct a 1-D spectral impulse response with a 2-diff Gaussian.
 
@@ -180,11 +231,72 @@ def strf(time, freq, sr, bins_per_octave, rate=1, scale=1, phi=0, theta=0,
         ndft = max(512, nextpow2(max(len(hs), len(ht))))
         ndft = max(len(hs), len(ht))
     assert ndft >= max(len(ht), len(hs))
-    hsa = hilbert(hs, ndft)[:len(hs)]
-    hta = hilbert(ht, ndft)[:len(ht)]
+    hsa = signal.hilbert(hs, ndft)[:len(hs)]
+    hta = signal.hilbert(ht, ndft)[:len(ht)]
     hirs = hs * np.cos(phi) + hsa.imag * np.sin(phi)
     hirt = ht * np.cos(theta) + hta.imag * np.sin(theta)
-    hirs_ = hilbert(hirs, ndft)[:len(hs)]
-    hirt_ = hilbert(hirt, ndft)[:len(ht)]
+    hirs_ = signal.hilbert(hirs, ndft)[:len(hs)]
+    hirt_ = signal.hilbert(hirt, ndft)[:len(ht)]
     return np.outer(hirt_, hirs_).real,\
         np.outer(np.conj(hirt_), hirs_).real
+
+
+def strf_gabor(supn, supk, wn, wk):
+    """Spectrotemporal receptive fields implemented using the Gabor filters.
+
+    This implementation follows the work of Schadler et al. in
+    Schadler, Marc René, Bernd T. Meyer, and Birger Kollmeier. "Spectro-temporal
+    modulation subspace-spanning filter bank features for robust automatic
+    speech recognition."
+    The Journal of the Acoustical Society of America 131.5 (2012): 4134-4151.
+    """
+    n0 = supn // 2
+    k0 = supk // 2
+    nspan = np.arange(supn)
+    kspan = np.arange(supk)
+    nsin = np.exp(1j * wn*(nspan-n0))
+    ksin = np.exp(1j * wk*(kspan-k0))
+    nwind = .5 - .5 * np.cos(2*np.pi*nspan/(supn+1))
+    kwind = .5 - .5 * np.cos(2*np.pi*kspan/(supk+1))
+    return np.outer(nsin * nwind, ksin * kwind)
+
+
+def modspec(sig, sr, fr, fbank, lpf_env, lpf_mod, fc_mod=4, norm=False,
+            original=False):
+    """Modulation spectrogram proposed by Kingsbury et al.
+
+    Implemented Kingsbury, Brian ED, Nelson Morgan, and Steven Greenberg.
+    "Robust speech recognition using the modulation spectrogram."
+    Speech communication 25.1-3 (1998): 117-132.
+
+    Parameters
+    ----------
+    sig: numpy.ndarray
+        Time-domain signal to be processed.
+    sr, fr: int
+        Sampling rate; Frame rate.
+    fbank: fbank.Filterbank
+        A Filterbank object. .filter() must be implemented.
+    """
+    assert len(lpf_mod) % 2, "Modulation filter must have odd number of samples."
+    ss = len(lpf_mod) // 2
+    bpf_mod = lpf_mod * np.exp(1j*2*np.pi*fc_mod/fr * np.arange(-ss, ss+1))
+    deci = sr // fr
+    nframes = int(math.ceil(len(sig)/deci))
+    pspec = np.empty((nframes, len(fbank)))
+    if original:
+        pspec_orig = np.empty_like(pspec)
+    for kk, _ in enumerate(fbank):
+        band = fbank.filter(sig, kk)
+        if original:
+            pspec_orig[:, kk] = band[::deci][:nframes]**2
+        banddn = convdn(band.clip(0), lpf_env, deci, True)[:nframes]
+        if norm:  # long-term level normalization
+            banddn /= banddn.mean()
+        banddn = conv(banddn, bpf_mod, True)[:nframes]
+        pspec[:, kk] = banddn.real**2 + banddn.imag**2
+
+    if original:
+        return pspec, pspec_orig
+
+    return pspec

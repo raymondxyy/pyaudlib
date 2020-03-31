@@ -1,4 +1,4 @@
-"""Transforms and collating functions for neural network training."""
+"""Torch-style transform functions."""
 
 import numpy as np
 import torch

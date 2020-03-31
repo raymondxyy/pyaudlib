@@ -85,11 +85,12 @@ def pitch_demo(sig):
     fig2, axes = plt.subplots(2, 1, sharex=True)
     ax = axes[0]
     from audlib.plot import specgram
-    specgram(hist, ax, time_axis=stcenters(sig, SR, wind, hop, center=True))
+    specgram(hist, ax, time_axis=stcenters(sig, wind, hop, center=True)/SR)
     ax.set_title("T0 Histogram")
     ax.set_ylabel("Lag")
     ax = axes[1]
-    specgram(medfilt2d(hist, kernel_size=(5, 1)), ax, time_axis=stcenters(sig, SR, wind, hop, center=True))
+    specgram(medfilt2d(hist, kernel_size=(5, 1)), ax,
+             time_axis=stcenters(sig, wind, hop, center=True)/SR)
     ax.set_title("T0 Histogram - Median Filtered (3x3)")
     ax.set_ylabel("Lag")
 
@@ -101,8 +102,10 @@ if __name__ == '__main__':
     if path is None:
         print("Specify WAV with export WAV=/path/to/audio.wav!")
         exit()
-    from audlib.io.audio import audioread
-    sig, _ = audioread(path, sr=SR)
+    from audlib.io.audio import audioread, audioinfo
+    info = audioinfo(path)
+    assert info.samplerate == SR, f"Supports {SR} Hz sampling rate only."
+    sig, _ = audioread(path)
 
     pitch_demo(sig)
 

@@ -2,7 +2,6 @@
 import sys
 from random import randrange
 import soundfile as sf
-from resampy import resample
 import numpy as np
 import os
 import subprocess
@@ -61,7 +60,12 @@ if not os.path.exists(_sph2pipe):
 
 
 def sphereinfo(path):
-    """Read metadata of a embedded-shorten sphere file.
+    """Read metadata of a embedded-shorten sphere file."""
+    return SphereInfo(path)
+
+
+class SphereInfo(object):
+    """soundfile.info interface for embedded-shorten-v2.00.
 
     A sphere header looks like the following:
     NIST_1A
@@ -74,49 +78,36 @@ def sphereinfo(path):
     sample_coding -s26 pcm,embedded-shorten-v2.00
     sample_checksum -i 24616
     end_head
+
     """
-    info = {}
-    with open(path, 'rb') as fp:
-        for line in fp:
-            if line.strip() == b'1024':
-                break
-
-        for line in fp:
-            if line.strip() == b'end_head':
-                break
-            items = line.strip().decode().split()
-            field, flag, val = items[0], items[1], ' '.join(items[2:])
-            info[field] = int(val) if flag == '-i' else val
-
-    return info
-
-
-class SphereInfo(object):
-    """soundfile.info interface for embedded-shorten."""
     __slots__ = 'samplerate', 'frames'
 
     def __init__(self, path):
         """Read metadata of a sphere file."""
         super(SphereInfo, self).__init__()
+        info = {}
+        with open(path, 'rb') as fp:
+            for line in fp:
+                if line.strip() == b'1024':
+                    break
 
-        info = sphereinfo(path)
+                for line in fp:
+                    if line.strip() == b'end_head':
+                        break
+            items = line.strip().decode().split()
+            field, flag, val = items[0], items[1], ' '.join(items[2:])
+            info[field] = int(val) if flag == '-i' else val
+
         self.samplerate = info['sample_rate']
         self.frames = info['sample_count']
 
 
 def audioinfo(path):
-    """Read metadata of an audio file.
-
-    A wrapper of soundfile.info plus a class for embedded-shorten files.
-    Parameters
-    ----------
-    path: str
-        Full path to audio file.
+    """A wrapper of soundfile.info plus a class for embedded-shorten files.
 
     Returns
     -------
-    info: class
-        A soundfile.info class of available metadata.
+    info: soundfile._SoundFileInfo or SphereInfo
 
     """
     try:
@@ -125,114 +116,59 @@ def audioinfo(path):
         return SphereInfo(path)
 
 
-def sphereread(path, start=0, stop=None):
+def sphereread(path, frames=-1, start=0, stop=None, **kwargs):
     """Read a embedded-shorten .sph file using sph2pipe.
 
-    Assume `stop` does not exceed total duration.
+    TODO: Make padding work.
     """
     assert start >= 0, "Must start at non-negative sample point."
-    if stop is None:
-        dur = "{}:".format(start)
+    if stop is not None:
+        assert stop > start, "Invalid stop."
+        dur = f"{start}:{stop}"
+    elif frames > -1:
+        dur = f"{start}:{start+frames}"
     else:
-        dur = "{}:{}".format(start, stop)
+        dur = f"{start}:"
+
     cmd = [_sph2pipe, '-f', 'wav', '-s', dur, path]
-    x, xsr = sf.read(io.BytesIO(subprocess.check_output(cmd)))
+    x, sr = sf.read(io.BytesIO(subprocess.check_output(cmd)), **kwargs)
 
-    return x, xsr
-
-
-def audioread(path, sr=None, start=0, stop=None, force_mono=False,
-              norm=False, verbose=False):
-    """Read audio from path and return an numpy array.
-
-    Parameters
-    ----------
-    path: str
-        path to audio on disk.
-    sr: int, optional
-        Sampling rate. Default to None.
-        If None, do nothing after reading audio.
-        If not None and different from sr of the file, resample to new sr.
-    force_mono: bool
-        Set to True to force mono output.
-    verbose: bool
-        Enable verbose.
-
-    """
-    path = os.path.abspath(path)
-    if not os.path.exists(path):
-        raise ValueError("[{}] does not exist!".format(path))
-    try:
-        x, xsr = sf.read(path, start=start, stop=stop)
-    except RuntimeError:  # fix for sph pcm-embedded shortened v2
-        if verbose:
-            print('WARNING: Audio type not supported. Trying sph2pipe...')
-        x, xsr = sphereread(path, start=start, stop=stop)
-
-    if len(x.shape) == 1:  # mono
-        if sr and (xsr != sr):
-            x = resample(x, xsr, sr)
-            xsr = sr
-        if norm:
-            x /= np.max(np.abs(x))
-        return x, xsr
-    else:  # multi-channel
-        if sr and (xsr != sr):
-            x = resample(x, xsr, sr, axis=0)
-            xsr = sr
-        if force_mono:
-            x = x.sum(axis=1)/x.shape[1]
-        if norm:
-            x = x / np.abs(x).max(axis=0)
-
-        return x, xsr
+    return x, sr
 
 
-def audiogen(path, framesize, hopsize, start=0, stop=None, force_mono=False,
-             norm=False):
-    """Similar to audioread, but return a generator instead.
-
-    Current version pads zeros in the end.
+def audioread(file, frames=-1, start=0, stop=None, **kwargs):
+    """A wrapper for soundfile.read plus ability to read .sph file.
 
     Parameters
     ----------
-    path: str
-        Path to an audio file.
-    framesize: int
-        Size of each yielded frame.
-    hop: int or float
-        Hop size in terms of number of samples or percentage.
+    path: str or int or file-like object
+        File path or object to read from. See soundfile.SoundFile for details.
 
     See Also
     --------
-    audioread
+    soundfile.read
 
     """
-    def _procframe(frame):
-        if force_mono and (frame.shape[1] > 1):
-            frame = frame.sum(axis=1)/frame.shape[1]
-        if norm:
-            frame = frame / np.abs(frame).max(axis=0)
-        return frame
+    try:
+        x, sr = sf.read(file, frames, start, stop, **kwargs)
+    except RuntimeError:  # fix for sph pcm-embedded shortened v2
+        assert type(file) is str, ".sph file only accepts string input."
+        x, sr = sphereread(file, frames, start, stop, **kwargs)
 
-    for frame in sf.blocks(path, blocksize=framesize,
-                           overlap=int(framesize-hopsize),
-                           start=start, stop=stop,
-                           fill_value=0.):
-        yield _procframe(frame)
+    return x, sr
 
 
-def audiowrite(data, sr, outpath, norm=True):
-    """Write a numpy array into an audio file.
+def audiowrite(file, data, sr, norm=True, **kwargs):
+    """A wrapper of soundfile.write with normalization option.
 
     Parameters
     ----------
+    file: str or int or file-like object
+        The file to write to. See soundfile.SoundFile.
     data: array_like
         Audio waveform.
     sr: int
         Output sampling rate.
-    outpath: str
-        File path to the output on disk. Directory does not need to exist.
     norm: bool, optional
         Normalize amplitude by scaling so that maximum absolute amplitude is 1.
         Default to true.
@@ -242,7 +178,7 @@ def audiowrite(data, sr, outpath, norm=True):
     if norm and (absmax != 0):
         data /= absmax
 
-    return sf.write(outpath, data.T, sr)
+    return sf.write(file, data, sr, **kwargs)
 
 
 def chk_duration(path, minlen=None, maxlen=None, unit='second'):

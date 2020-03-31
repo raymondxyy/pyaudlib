@@ -10,11 +10,80 @@
 
 import numpy as np
 from numpy.fft import rfft, irfft
+from scipy.signal import lfilter
 
 from .sig.stproc import stana, ola
+from .sig.fbanks import Gammatone
 from .sig.temporal import lpc_parcor, ref2pred
 from .sig.transform import stft, istft, stpsd
+from .sig.spectemp import ssf, invspec
 from .noise import mmse_henriks as npsd_henriks
+
+
+class SSFEnhancer(object):
+    """Suppression of Slowly-varying components and the Falling edge.
+
+    This implementation follows paper by Kim and Stern:
+    Kim, Chanwoo, and Richard M. Stern."Nonlinear enhancement of onset
+    for robust speech recognition." Eleventh Annual Conference of the
+    International Speech Communication Association. 2010.
+
+    See Also
+    --------
+    spectemp.ssf
+
+    """
+    def __init__(self, sr, wind, hop, nfft, num_chan=40):
+        """Instantiate an SSF enhancer.
+
+        Parameters
+        ----------
+        sr: int
+            Sampling rate in Hz.
+        wind: numpy.ndarray
+            Window function.
+        hop: float
+            Hop fraction.
+        nfft: int
+            Number of DFT points.
+
+        Keyword Parameters
+        ------------------
+        num_chan: int, 40
+            Number of channels in the Gammatone filterbank.
+        ptype: int, 2
+            SSF type. Default to 2.
+
+        """
+        assert sr > 9000, "Sampling rate too low!"
+        self.gbank = Gammatone(sr, num_chan, (130., 4500.))
+        self.gammawgt = self.gbank.gammawgt(nfft)
+
+        def _stft(sig):
+            return stft(sig, wind, hop, nfft, synth=True, zphase=True)
+
+        def _istft(spec):
+            return istft(spec, wind, hop, nfft, zphase=True)
+
+        self.stft = _stft
+        self.istft = _istft
+
+
+    def __call__(self, sig, lambda_lp, c0=.01, ptype=2, pre_emphasis=True):
+        """Enhance a signal with SSF."""
+        if pre_emphasis:
+            sig = lfilter([1, -.97], [1], sig)
+
+        sigspec = self.stft(sig)
+        gpmask = ssf((sigspec.real**2 + sigspec.imag**2) @ self.gammawgt,
+                     lambda_lp, c0, ptype)
+        pmask = invspec(gpmask, self.gammawgt)
+        out = self.istft(np.sqrt(pmask) * sigspec)
+
+        if pre_emphasis:
+            out = lfilter([1], [1, -.97], out)
+
+        return out
 
 
 def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3,
@@ -49,9 +118,9 @@ def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3,
 
     # Estimate noise PSD first
     if noise is None:
-        npsd = stpsd(x, sr, wind, hop, nfft, nframes=6)
+        npsd = stpsd(x, wind, hop, nfft, nframes=6)
     else:
-        npsd = stpsd(noise, sr, wind, hop, nfft, nframes=-1)
+        npsd = stpsd(noise, wind, hop, nfft, nframes=-1)
 
     def wiener_iter_frame(frame):
         """One frame of Wiener iterative filtering."""
@@ -83,12 +152,12 @@ def wiener_iter(x, sr, wind, hop, nfft, noise=None, zphase=True, iters=3,
 
     # Now perform frame-level Wiener filtering on x
     srec = []
-    for xframe in stana(x, sr, wind, hop, synth=True):
+    for xframe in stana(x, wind, hop, synth=True):
         xclean, _, _ = wiener_iter_frame(xframe)
         srec.append(xclean)
 
     # Synthesis by overlap-add (OLA)
-    xsynth = ola(srec, sr, wind, hop)
+    xsynth = ola(srec, wind, hop)
 
     return xsynth
 
@@ -117,15 +186,15 @@ def asnr(x, sr, wind, hop, nfft, noise=None, zphase=True, snrsmooth=.98,
     """
     # Estimate noise PSD first
     if noise is None:
-        npsd = stpsd(x, sr, wind, hop, nfft, nframes=6)
+        npsd = stpsd(x, wind, hop, nfft, nframes=6)
     else:
-        npsd = stpsd(noise, sr, wind, hop, nfft, nframes=-1)
+        npsd = stpsd(noise, wind, hop, nfft, nframes=-1)
 
     xfilt = []  # holds Wiener-filtered output
     vad = []  # holds voice activity decision
     priori_m1 = np.zeros_like(npsd)
     posteri_m1 = np.zeros_like(npsd)
-    for i, xspec in enumerate(stft(x, sr, wind, hop, nfft, synth=True,
+    for i, xspec in enumerate(stft(x, wind, hop, nfft, synth=True,
                                    zphase=zphase)):
         xpsd = np.abs(xspec)**2
         posteri = xpsd / npsd
@@ -151,7 +220,7 @@ def asnr(x, sr, wind, hop, nfft, noise=None, zphase=True, snrsmooth=.98,
         posteri_m1[:] = posteri
 
     # Synthesis by overlap-add (OLA)
-    xout = istft(xfilt, sr, wind, hop, nfft, zphase=zphase)
+    xout = istft(xfilt, wind, hop, nfft, zphase=zphase)
 
     return xout, vad
 
@@ -256,9 +325,9 @@ def asnr_activate(x, sr, wind, hop, nfft, noise=None, zphase=True,
 
     # Estimate noise PSD first
     if noise is None:
-        npsd_init = stpsd(x, sr, wind, hop, nfft, nframes=6)
+        npsd_init = stpsd(x, wind, hop, nfft, nframes=6)
     else:
-        npsd_init = stpsd(noise, sr, wind, hop, nfft, nframes=-1)
+        npsd_init = stpsd(noise, wind, hop, nfft, nframes=-1)
 
     xfilt = []  # holds Wiener-filtered output
     vad = []  # holds voice activity decision
@@ -273,7 +342,7 @@ def asnr_activate(x, sr, wind, hop, nfft, noise=None, zphase=True,
     posteri_m1 = np.zeros_like(npsd_init)
     priori_m1 = np.zeros_like(npsd_init)
     llkr_m1 = np.zeros_like(npsd_init)
-    for nn, xspec in enumerate(stft(x, sr, wind, hop, nfft, synth=True,
+    for nn, xspec in enumerate(stft(x, wind, hop, nfft, synth=True,
                                     zphase=zphase)):
         if nn == 0:  # initial state
             xmag_m1 = np.abs(xspec)
@@ -305,7 +374,7 @@ def asnr_activate(x, sr, wind, hop, nfft, noise=None, zphase=True,
         xfilt.append(filt*xspec)
 
     # Synthesis by overlap-add (OLA)
-    xout = istft(xfilt, sr, wind, hop, nfft, zphase=zphase)
+    xout = istft(xfilt, wind, hop, nfft, zphase=zphase)
 
     return xout
 
@@ -321,9 +390,9 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
     """
     # Estimate noise PSD first
     if noise is None:
-        npsd_init = stpsd(x, sr, wind, hop, nfft, nframes=6)
+        npsd_init = stpsd(x, wind, hop, nfft, nframes=6)
     else:
-        npsd_init = stpsd(noise, sr, wind, hop, nfft, nframes=-1)
+        npsd_init = stpsd(noise, wind, hop, nfft, nframes=-1)
 
     xfilt = []  # holds Wiener-filtered output
 
@@ -373,7 +442,7 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
     posteri_m1 = np.zeros_like(npsd_init)
     priori_m1 = np.zeros_like(npsd_init)
     llkr_m1 = np.zeros_like(npsd_init)
-    for nn, xspec in enumerate(stft(x, sr, wind, hop, nfft, synth=True,
+    for nn, xspec in enumerate(stft(x, wind, hop, nfft, synth=True,
                                     zphase=zphase)):
         if nn == 0:
             # inital state
@@ -406,12 +475,12 @@ def asnr_recurrent(x, sr, wind, hop, nfft, noise=None, zphase=True,
         llkr_m1[:] = llkr
 
     # Synthesis by overlap-add (OLA)
-    xout = istft(xfilt, sr, wind, hop, nfft, zphase=zphase)
+    xout = istft(xfilt, wind, hop, nfft, zphase=zphase)
 
     return xout
 
 
-def mmse_henriks(sig, sr, wind, hop, nfft, noise=None, alpha=.98, beta=.8, 
+def mmse_henriks(sig, sr, wind, hop, nfft, noise=None, alpha=.98, beta=.8,
                  rule='wiener'):
     """Implement the MMSE method by Henriks et al for noise PSD estimation.
 
@@ -448,12 +517,12 @@ def mmse_henriks(sig, sr, wind, hop, nfft, noise=None, alpha=.98, beta=.8,
     noise.mmse_henriks
 
     """
-    sigspec = stft(sig, sr, wind, hop, nfft, synth=True, zphase=True)
+    sigspec = stft(sig, wind, hop, nfft, synth=True, zphase=True)
     _, priori, _ = npsd_henriks(sigspec.real**2+sigspec.imag**2, noise,
                                 alpha, beta, rule)
 
     irm = priori2filt(priori, rule)
-    xout = istft(sigspec*irm, sr, wind, hop, nfft, zphase=True)
+    xout = istft(sigspec*irm, wind, hop, nfft, zphase=True)
 
     return xout
 
@@ -469,8 +538,8 @@ def asnr_optim(x, t, sr, wind, hop, nfft, zphase=True, rule='wiener'):
 
     xfilt = []
     for xspec, tspec in zip(
-            stft(x, sr, wind, hop, nfft, synth=True, zphase=zphase),
-            stft(t, sr, wind, hop, nfft, synth=True, zphase=zphase)):
+            stft(x, wind, hop, nfft, synth=True, zphase=zphase),
+            stft(t, wind, hop, nfft, synth=True, zphase=zphase)):
         nspec = xspec - tspec
         tpsd = np.abs(tspec) ** 2
         npsd = np.abs(nspec) ** 2
@@ -481,7 +550,7 @@ def asnr_optim(x, t, sr, wind, hop, nfft, zphase=True, rule='wiener'):
         xfilt.append(filt * xspec)
 
     # Synthesis by overlap-add (OLA)
-    xout = istft(xfilt, sr, wind, hop, nfft, zphase=zphase)
+    xout = istft(xfilt, wind, hop, nfft, zphase=zphase)
 
     return xout
 

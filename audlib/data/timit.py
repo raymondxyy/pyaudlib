@@ -1,6 +1,7 @@
 """Datasets derived from the TIMIT dataset for phoneme recognition."""
 import os
 from random import randrange
+import re
 
 from ..io.audio import audioinfo
 from .dataset import AudioDataset, audioread
@@ -137,85 +138,10 @@ class TIMIT(AudioDataset):
             ├── DR7
             └── DR8
     """
-    @staticmethod
-    def isaudio(path):
+    @classmethod
+    def isaudio(cls, path):
         return path.upper().endswith('.WAV')
 
-    def __init__(self, root, task=None, train=True, filt=None, transform=None):
-        """Instantiate an ASVspoof dataset.
-
-        Parameters
-        ----------
-        root: str
-            The root directory of TIMIT.
-        task: str, None
-            Convert string label to integer labels if specified.
-            One of [speaker/phoneme].
-        train: bool, True
-            Retrieve training or test set.
-        filt: callable, None
-            Filters to be applied on each audio path. Default to None.
-        transform: callable(TIMITSpeech) -> TIMITSpeech
-            User-defined transformation function.
-
-        Returns
-        -------
-        An class instance `TIMIT` that has the following properties:
-            - len(TIMIT) == number of usable audio samples
-            - TIMIT[idx] == a TIMITSpeech instance
-
-        See Also
-        --------
-        TIMITSpeech, dataset.AudioDataset, datatype.Audio
-
-        """
-        self.train = train
-        self._spkr_table = spkrinfo(
-            os.path.join(root, 'TIMIT/DOC/SPKRINFO.TXT'), train)
-        if train:
-            audroot = os.path.join(root, 'TIMIT/TRAIN')
-        else:
-            audroot = os.path.join(root, 'TIMIT/TEST')
-
-        def _2label(sample):
-            """Convert true labels to integer labels for specific tasks."""
-            if task == 'speaker':
-                return self.spkr2label(sample)
-            elif task == 'phoneme':
-                return self.phon2label(sample)
-            elif task is None:
-                return sample
-            else:
-                raise NotImplementedError
-
-        def _read(path):
-            """Different options to read an audio file."""
-            pbase = os.path.splitext(path)[0]
-            gsid = pbase.split('/')[-2]
-            gender, sid = gsid[0], gsid[1:]
-            assert sid in self._spkr_table
-            phoneseq = phnread(pbase+'.PHN')
-            wrdseq = phnread(pbase+'.WRD')
-            transcrpt = txtread(pbase+'.TXT')
-            return _2label(
-                TIMITSpeech(*audioread(path), speaker=sid, gender=gender,
-                            transcript=transcrpt, phonemeseq=phoneseq,
-                            wordseq=wrdseq))
-
-        super(TIMIT, self).__init__(
-            audroot, filt=self.isaudio if not filt else lambda p:
-                self.isaudio(p) and filt(p), read=_read, transform=transform)
-
-    def spkr2label(self, sample):
-        """Replace sample.speaker by its integer ID."""
-        sample.speaker = self._spkr_table[sample.speaker]
-        return sample
-
-    def phon2label(self, sample):
-        """Replace sample.phonemeseq by its integer ID."""
-        sample.phonemeseq = [
-            (t, PHONETABLE[p]) for t, p in sample.phonemeseq]
-        return sample
 
     def __repr__(self):
         """Representation of TIMIT."""
@@ -249,7 +175,8 @@ class TIMIT(AudioDataset):
             Total [{}] valid files to be processed.
             Total [{}/{}] speakers appear in this set.
             [Phoneme]: [counts], [percentage], [min-max duration (ms)]\n{}
-        """.format(self.__class__.__name__, 'train' if self.train else 'test',
+        """.format(self.__class__.__name__,
+                   self.partition if hasattr(self, 'partition') else None,
                    len(self._filepaths), len(spkr_appeared),
                    len(self._spkr_table),
                    "\n".join(
@@ -257,6 +184,130 @@ class TIMIT(AudioDataset):
                        for p, c in phoncts.items()))
 
         return report
+
+
+class TIMIT_ASR(TIMIT):
+    CORE_TEST_DIRECTORIES = ['DR1/MDAB0', 'DR1/MWBT0', 'DR1/FELC0',
+                             'DR2/MTAS1', 'DR2/MWEW0', 'DR2/FPAS0',
+                             'DR3/MJMP0', 'DR3/MLNT0', 'DR3/FPKT0',
+                             'DR4/MLLL0', 'DR4/MTLS0', 'DR4/FJLM0',
+                             'DR5/MBPM0', 'DR5/MKLT0', 'DR5/FNLP0',
+                             'DR6/MCMJ0', 'DR6/MJDH0', 'DR6/FMGD0',
+                             'DR7/MGRT0', 'DR7/MNJM0', 'DR7/FDHC0',
+                             'DR8/MJLN0', 'DR8/MPAM0', 'DR8/FMLD0']
+
+    def is_core_test(self, path):
+        if not self.isaudio(path):
+            return False
+        if '/'.join(path.split('/')[-3:-1]) not in self.CORE_TEST_DIRECTORIES:
+            return False
+
+        return 'SA' not in os.path.basename(path)
+
+    def is_complete_test(self, path):
+        if not self.isaudio(path):
+            return False
+
+        return 'SA' not in os.path.basename(path)
+
+    def read(self, path):
+        """Different options to read an audio file."""
+        pbase = os.path.splitext(path)[0]
+        gsid = pbase.split('/')[-2]
+        gender, sid = gsid[0], gsid[1:]
+        assert sid in self._spkr_table
+        phoneseq = phnread(pbase+'.PHN')
+        wrdseq = phnread(pbase+'.WRD')
+        transcrpt = txtread(pbase+'.TXT')
+        sample = TIMITSpeech(
+            *audioread(path), speaker=sid, gender=gender,
+            transcript=transcrpt, phonemeseq=phoneseq,
+            wordseq=wrdseq
+        )
+        sample.phonemeseq = [
+            (t, PHONETABLE[p]) for t, p in sample.phonemeseq]
+        return sample
+
+    def __init__(self, root, partition, filt=None, transform=None):
+        self._spkr_table = spkrinfo(
+            os.path.join(root, 'TIMIT/DOC/SPKRINFO.TXT'),
+            partition.lower() == 'train'
+        )
+        if partition.lower() == 'train':
+            root = os.path.join(root, 'TIMIT/TRAIN')
+            filt = None
+        elif partition.lower() == 'core-test':
+            root = os.path.join(root, 'TIMIT/TEST')
+            filt = self.is_core_test
+        elif partition.lower() == 'complete-test':
+            root = os.path.join(root, 'TIMIT/TEST')
+            filt = self.is_complete_test
+        else:
+            raise ValueError(
+                "partition must be one of train/core-test/complete-test."
+            )
+        self.partition = partition.lower()
+
+        super(TIMIT, self).__init__(root, filt=filt, transform=transform)
+
+
+class TIMIT_SID(TIMIT):
+    def read(self, path):
+        pbase = os.path.splitext(path)[0]
+        gsid = pbase.split('/')[-2]
+        gender, sid = gsid[0], gsid[1:]
+        assert sid in self._spkr_table
+        phoneseq = phnread(pbase+'.PHN')
+        wrdseq = phnread(pbase+'.WRD')
+        transcrpt = txtread(pbase+'.TXT')
+        sample = TIMITSpeech(
+            *audioread(path), speaker=sid, gender=gender,
+            transcript=transcrpt, phonemeseq=phoneseq,
+            wordseq=wrdseq
+        )
+        sample.speaker = self._spkr_table[sample.speaker]
+        return sample
+
+    def __init__(self, root, train=True, filt=None, transform=None):
+        """Instantiate an ASVspoof dataset.
+
+        Parameters
+        ----------
+        root: str
+            The root directory of TIMIT.
+        train: bool, True
+            Retrieve training or test set.
+        filt: callable, None
+            Filters to be applied on each audio path. Default to None.
+        transform: callable(TIMITSpeech) -> TIMITSpeech
+            User-defined transformation function.
+
+        Returns
+        -------
+        An class instance `TIMIT` that has the following properties:
+            - len(TIMIT) == number of usable audio samples
+            - TIMIT[idx] == a TIMITSpeech instance
+
+        See Also
+        --------
+        TIMITSpeech, dataset.AudioDataset, datatype.Audio
+
+        """
+        self.train = train
+        self._spkr_table = spkrinfo(
+            os.path.join(root, 'TIMIT/DOC/SPKRINFO.TXT'), train)
+        if train:
+            root = os.path.join(root, 'TIMIT/TRAIN')
+        else:
+            root = os.path.join(root, 'TIMIT/TEST')
+
+        if filt is None:
+            _filt = self.isaudio
+        else:
+            def _filt(p): return self.isaudio(p) and filt(p)
+        super(TIMIT, self).__init__(
+            root, filt=_filt, transform=transform
+        )
 
 
 # Some filter functions

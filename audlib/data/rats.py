@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """Define RATS datasets."""
 
 import glob
@@ -7,7 +9,7 @@ import soundfile as sf
 
 from .dataset import SEDataset, Dataset
 from .datatype import NoisySpeech, Audio
-from ..io.audio import audioread
+from ..io.audio import audioread, audioinfo
 from ..io.batch import genfiles
 
 
@@ -180,7 +182,7 @@ class RATS_SAD(Dataset):
     The dataset directory should follow the structure below.
 
     """
-    def __init__(self, root, partition, sr=None, filt=None, transform=None):
+    def __init__(self, root, partition, filt=None, transform=None):
         """Instantiate an ASVspoof dataset.
 
         Parameters
@@ -189,8 +191,6 @@ class RATS_SAD(Dataset):
             The root directory of AVSpoof.
         partition: str
             One of 'train', 'dev-1', or 'dev-2'.
-        sr: int, optional
-            Sampling rate in Hz. RATS_SAD is recorded at 16kHz.
         filt: callable() --> bool
             Optional user-defined filter function.
         transform: callable(SpeechActivity) -> SpeechActivity
@@ -216,7 +216,6 @@ class RATS_SAD(Dataset):
         else:
             raise ValueError("partition must be one of train/valid/test.")
         self.root = root
-        self.sr = sr if sr else 16000
         self.audroot = os.path.join(root, 'audio')
         self.sadroot = os.path.join(root, 'sad')
         assert all(os.path.exists(dd) for dd in [self.audroot, self.sadroot])
@@ -237,8 +236,9 @@ class RATS_SAD(Dataset):
         self.transform = transform
 
     def read(self, path, start, stop, label):
-        sig, ssr = audioread(path, sr=self.sr, start=int(start*self.sr),
-                             stop=int(stop*self.sr), norm=True)
+        info = audioinfo(path)
+        sr = info.samplerate
+        sig, ssr = audioread(path, start=int(start*sr), stop=int(stop*sr))
         return SpeechActivity(sig, ssr, speechtype=label)
 
     def __getitem__(self, idx):

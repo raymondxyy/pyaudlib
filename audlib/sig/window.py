@@ -50,8 +50,7 @@ def hamming(wsize, hop=None, nchan=None, synth=False):
                 wind[0] /= 2.
                 wind[-1] /= 2.
             else:  # even-size window
-                wind = np.hamming(wsize+1)
-                wind = wind[:-1]
+                wind = np.hamming(wsize+1)[:-1]
             assert tnorm(wind, hop),\
                 "[wsize:{}, hop:{}] violates COLA in time.".format(wsize, hop)
         elif nchan is not None:  # for perfect filterbank synthesis
@@ -76,13 +75,9 @@ def rect(wsize, hop=None, nchan=None):
 
     Returns
     -------
-    wind : ndarray
+    wind : numpy.ndarray
         A `wsize`-point rectangular window. If `hop` is not None, normalize
         amplitude for constant overlap-add to unity.
-
-    See Also
-    --------
-    normalize : Normalize window amplitude for unity overlap-add.
 
     """
     wind = np.ones(wsize)
@@ -215,7 +210,7 @@ def fcola(wind, nchan):
 
 
 def hop2hsize(wind, hop):
-    """Convert hop fraction to integer size if necessary."""
+    """Interpret hop fraction to integer sample size if necessary."""
     if hop >= 1:
         assert type(hop) == int, "Hop size must be integer!"
         return hop

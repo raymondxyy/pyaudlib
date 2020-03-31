@@ -4,11 +4,12 @@ This is a direct copy of PyTorch's dataset class:
 https://pytorch.org/docs/stable/_modules/torch/utils/data/dataset.html#Dataset
 with some omissions and additions.
 """
+import math
 import os
 import bisect
 
 from ..io.batch import lsfiles
-from ..io.audio import audioread
+from ..io.audio import audioread, audioinfo
 from .datatype import Audio
 
 
@@ -55,16 +56,14 @@ class Dataset(object):
 class AudioDataset(Dataset):
     """A dataset that gets all audio files from a directory."""
 
-    @staticmethod
-    def isaudio(path):
+    def isaudio(self, path):
         return path.endswith(('.wav', '.flac', '.sph'))
 
-    @staticmethod
-    def read(path, sr):
+    def read(self, path):
         """Read audio and put in an Audio object."""
-        return Audio(*audioread(path, sr=sr))
+        return Audio(*audioread(path))
 
-    def __init__(self, root, sr=None, filt=None, read=None, transform=None):
+    def __init__(self, root, filt=None, read=None, transform=None):
         """Instantiate an audio dataset.
 
         Parameters
@@ -91,10 +90,10 @@ class AudioDataset(Dataset):
         """
         super(AudioDataset).__init__()
         self.root = root
-        self.sr = sr
         self._filepaths = lsfiles(root, filt=filt if filt else self.isaudio,
                                   relpath=True)
-        self.read = read if read else lambda f: self.read(f, sr)
+        if read is not None:
+            self.read = read
         self.transform = transform
 
     @property
@@ -109,6 +108,7 @@ class AudioDataset(Dataset):
     def __getitem__(self, idx):
         """Get i-th valid item after reading in and transform."""
         sample = self.read(os.path.join(self.root, self._filepaths[idx]))
+
         if self.transform:
             sample = self.transform(sample)
 
@@ -124,12 +124,35 @@ class AudioDataset(Dataset):
         return report
 
 
+class LongFile(Dataset):
+    """Treat a long audio file as a dataset and sample fixed-length segments."""
+    def __init__(self, path, seglength, segshift, transform=None):
+        """Instantiate a LongFile dataset."""
+        assert os.path.exists(path), "File does not exist!"
+        self.path = path
+        self.info = audioinfo(self.path)
+        sr = self.info.samplerate
+        self.segshift = int(segshift*sr)
+        assert self.segshift > 1, "Insufficient segshift!"
+        self.seglength = int(seglength*sr)
+
+    def __getitem__(self, idx):
+        idx %= len(self)
+        ns = idx*self.segshift
+        return Audio(*audioread(self.path, frames=self.seglength,
+                                start=ns, fill_value=0))
+
+    def __len__(self):
+        return math.ceil(
+            (self.info.frames - self.seglength) / self.segshift) + 1
+
+
 class LstDataset(Dataset):
     """A dataset that gets all audio files from a list of file paths."""
 
-    def __init__(self, lst, root=None, sr=None, read=None, transform=None):
+    def __init__(self, lst, root=None, read=None, transform=None):
         """Instantiate an audio dataset.
-
+False
         Parameters
         ----------
         lst: list(str) or str
@@ -156,7 +179,6 @@ class LstDataset(Dataset):
         """
         super(LstDataset).__init__()
         self.root = root
-        self.samplerate = sr
         if isinstance(lst, list):
             self._filepaths = lst
         elif isinstance(lst, str):
@@ -175,7 +197,7 @@ class LstDataset(Dataset):
         """Read a single file from path."""
         if self.customread:
             return self.customread(path)
-        return Audio(*audioread(path, sr=self.samplerate))
+        return Audio(*audioread(path))
 
     def __len__(self):
         """Return number of valid audio files."""

@@ -1,2 +1,6 @@
 recursive-include audlib/tools *.c *.h *.exe
 prune audlib/tools/sph2pipe/sph2pipe
+recursive-include audlib/samples *
+recursive-include audlib/misc *
+recursive-include audlib/cfg *
+

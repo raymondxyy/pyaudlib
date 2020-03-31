@@ -1,3 +1,5 @@
+# coding: utf-8
+
 """Dataset class for the ASVspoof dataset."""
 import os
 from .dataset import AudioDataset, audioread
@@ -71,8 +73,7 @@ class ASVspoof2017(AudioDataset):
         else:
             raise ValueError("Invalid file name.")
 
-    def __init__(self, root, partition, sr=None, filt=None, read=None,
-                 transform=None):
+    def __init__(self, root, partition, filt=None, read=None, transform=None):
         """Instantiate an ASVspoof dataset.
 
         Parameters
@@ -81,8 +82,6 @@ class ASVspoof2017(AudioDataset):
             The root directory of AVSpoof.
         partition: str
             One of 'train', 'valid', or 'test'.
-        sr: int, optional
-            Sampling rate in Hz. AVSpoof is recorded at 16kHz.
         filt: callable, optional
             Filters to be applied on each audio path. Default to None.
         read: callable(str) -> (array_like, int), optional
@@ -118,7 +117,7 @@ class ASVspoof2017(AudioDataset):
         def _read(path):
             atype = None if self.is_genuine(path, self._evalkey) else 'r'
             if not read:
-                sig, ssr = audioread(path, sr=sr)
+                sig, ssr = audioread(path)
                 return SpoofedAudio(sig, ssr, attacktype=atype)
             else:
                 sig, ssr = read(path)
@@ -131,8 +130,8 @@ class ASVspoof2017(AudioDataset):
 
     def __repr__(self):
         """Representation of ASVspoof2017."""
-        return r"""{}({}, sr={}, transform={})
-        """.format(self.__class__.__name__, self.root, self.sr, self.transform)
+        return r"""{}({}, transform={})
+        """.format(self.__class__.__name__, self.root, self.transform)
 
     def __str__(self):
         """Print out a summary of instantiated dataset."""

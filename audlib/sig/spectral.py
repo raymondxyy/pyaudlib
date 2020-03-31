@@ -1,4 +1,4 @@
-"""Frame-level frequency-domain processing."""
+"""SPECTRAL-domain processing."""
 import math
 
 import numpy as np
@@ -27,7 +27,7 @@ def magphase(cspectrum, unwrap=False):
     return mag, phs
 
 
-def logmag(sig, floor=-80.):
+def logmag(sig, floor=-160.):
     """Compute natural log magnitude of complex spectrum.
 
     Parameters
@@ -38,13 +38,7 @@ def logmag(sig, floor=-80.):
         Magnitude floor in dB.
 
     """
-    eps = 10**(floor/20)
-    sigmag = np.abs(sig)
-    smallmag = sigmag < eps
-    sigmag[smallmag] = np.log(eps)
-    sigmag[~smallmag] = np.log(sigmag[~smallmag])
-
-    return sigmag
+    return np.log(np.abs(sig).clip(10**(floor/20)))
 
 
 def logpow(sig, floor=-80.):
@@ -58,13 +52,7 @@ def logpow(sig, floor=-80.):
         Magnitude floor in dB.
 
     """
-    eps = 10**(floor/10)
-    sigpow = sig.real**2 + sig.imag**2
-    smallpower = sigpow < eps
-    sigpow[smallpower] = np.log(eps)
-    sigpow[~smallpower] = np.log(sigpow[~smallpower])
-
-    return sigpow
+    return np.log((sig.real**2+sig.imag**2).clip(10**(floor/10)))
 
 
 def phasor(mag, phase):
@@ -249,7 +237,8 @@ def mvnorm1(powspec, frameshift, tau=3., tau_init=.1, t_init=.2):
     tau_init: float, .1
         Initial time constant for fast adaptation.
     t_init: float, .2
-        Amount of time in seconds from the beginning during which `tau_init` is applied.
+        Amount of time in seconds from the beginning during which `tau_init`
+        is applied.
         The rest of time will use `tau`.
 
     Returns
@@ -296,7 +285,8 @@ def mvnorm(powspec, frameshift, tau=3., tau_init=.1, t_init=.2):
     tau_init: float, .1
         Initial time constant for fast adaptation.
     t_init: float, .2
-        Amount of time in seconds from the beginning during which `tau_init` is applied.
+        Amount of time in seconds from the beginning during which `tau_init`
+        is applied.
         The rest of time will use `tau`.
 
     Returns

@@ -1,12 +1,12 @@
 """Test suite for LPC."""
 import numpy as np
+from audlib.quickstart import welcome
 
 
 def test_lpc():
     """Test LPC using 3 methods."""
-    from audlib.io.audio import audioread
     from audlib.sig.temporal import lpc_atc, lpc_cov, lpc_parcor, ref2pred
-    sig, sr = audioread('samples/welcome16k.wav')
+    sig, sr = welcome()
     frame = sig[16999:17319]
     order = 14
     alphas_atc, gain_atc = lpc_atc(frame, order)

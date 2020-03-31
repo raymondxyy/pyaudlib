@@ -8,9 +8,7 @@ from audlib.data.avspoof import AVSpoof, is_genuine, is_replay
                     reason='ENV $AVSPOOF_ROOT unspecified.')
 def test_avspoof():
     """Test AVSpoof class."""
-    dataset = AVSpoof(os.environ['AVSPOOF_ROOT'])
-    print(dataset)
-    dataset = AVSpoof(os.environ['AVSPOOF_ROOT'], sr=16000,
+    dataset = AVSpoof(os.environ['AVSPOOF_ROOT'],
                       filt=lambda p: is_genuine(p) or is_replay(p))
     print(dataset)
 

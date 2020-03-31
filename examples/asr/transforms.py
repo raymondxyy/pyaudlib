@@ -28,7 +28,7 @@ class Melspec(object):
 
         def _melspec(sig):
             """Compute melspec after cepstral-mean-norm."""
-            pspec = stpowspec(sig, srate, wind, hop, nfft)
+            pspec = stpowspec(sig, wind, hop, nfft)
             melspec = pspec @ self.melbank.wgts
             smallpower = melspec < 10**(-8)  # -80dB power floor
             melspec[~smallpower] = np.log(melspec[~smallpower])
