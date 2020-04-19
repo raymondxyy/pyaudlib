@@ -123,6 +123,9 @@ class AudioDataset(Dataset):
 
         return report
 
+    def info(self, idx):
+        return self._filepaths[idx]
+
 
 class LongFile(Dataset):
     """Treat a long audio file as a dataset and sample fixed-length segments."""
@@ -130,21 +133,30 @@ class LongFile(Dataset):
         """Instantiate a LongFile dataset."""
         assert os.path.exists(path), "File does not exist!"
         self.path = path
-        self.info = audioinfo(self.path)
-        sr = self.info.samplerate
+        self._info = audioinfo(self.path)
+        sr = self._info.samplerate
         self.segshift = int(segshift*sr)
         assert self.segshift > 1, "Insufficient segshift!"
         self.seglength = int(seglength*sr)
 
     def __getitem__(self, idx):
-        idx %= len(self)
+        if idx >= len(self):
+            raise StopIteration
         ns = idx*self.segshift
         return Audio(*audioread(self.path, frames=self.seglength,
                                 start=ns, fill_value=0))
 
     def __len__(self):
         return math.ceil(
-            (self.info.frames - self.seglength) / self.segshift) + 1
+            (self._info.frames - self.seglength) / self.segshift) + 1
+
+    def info(self, idx):
+        """Return a string description of i-th item."""
+        idx %= len(self)
+        sr = self._info.samplerate
+        ns = idx * self.segshift
+        ne = ns + self.seglength
+        return f'{self.path}:{ns/sr:.3f}s-{ne/sr:.3f}s'
 
 
 class LstDataset(Dataset):
@@ -152,7 +164,7 @@ class LstDataset(Dataset):
 
     def __init__(self, lst, root=None, read=None, transform=None):
         """Instantiate an audio dataset.
-False
+
         Parameters
         ----------
         lst: list(str) or str
