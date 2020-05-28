@@ -152,11 +152,15 @@ class LongFile(Dataset):
 
     def info(self, idx):
         """Return a string description of i-th item."""
+        return '{}:{:.3f}s-{:.3f}s'.format(self.path, *self.begin_end(idx))
+
+    def begin_end(self, idx):
+        """Returns the beginning and end times in seconds of the position."""
         idx %= len(self)
         sr = self._info.samplerate
         ns = idx * self.segshift
         ne = ns + self.seglength
-        return f'{self.path}:{ns/sr:.3f}s-{ne/sr:.3f}s'
+        return ns/sr, ne/sr
 
 
 class LstDataset(Dataset):
