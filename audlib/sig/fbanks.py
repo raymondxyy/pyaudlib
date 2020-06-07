@@ -241,7 +241,7 @@ class Gammatone(Filterbank):
             self.cf = erb_space(num_chan, *center_frequencies)[::-1]
 
         self.filters = []
-        for ii, cf in enumerate(self.cf):  # construct filter coefficients
+        for cf in self.cf:  # construct filter coefficients
             A0, A11, A12, A13, A14, A2, B0, B1, B2, gain = erb_filters(sr, cf)
             self.filters.append((A0, A11, A12, A13, A14, A2, B0, B1, B2, gain))
 
@@ -343,7 +343,7 @@ class ConstantQ(Filterbank):
         self.cfs = fmin * 2**(np.arange(self.nchan)/bins_per_octave)  # fcs
         self.zphase = zphase
         self.filts = []
-        for ii, k in enumerate(range(self.nchan)):  # make bandpass filters
+        for ii, _ in enumerate(range(self.nchan)):  # make bandpass filters
             cf = self.cfs[ii]
             wk = 2*np.pi*cf / sr
             wsize = math.ceil(self.qfactor*sr/cf)

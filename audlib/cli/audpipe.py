@@ -137,6 +137,7 @@ def read_cmd(files):
 @processor
 def extract_cmd(files, feature, cfg):
     """Extract features."""
+    import numpy as np
     assert os.path.exists(cfg), f"Invalid configuration path: {cfg}"
     assert feature is not None
     import configparser
@@ -156,19 +157,27 @@ def extract_cmd(files, feature, cfg):
         nchan = int(cc['GammatoneSpec']['nchannels'])
         GammatoneSpec = callables.GammatoneSpec(STFT, nchan)
 
+    def logpow(powerspec): return np.log(powerspec.clip(1e-8))
+
     if feature == 'stft':
-        Feature = STFT
+        Feature = callables.Compose([STFT, logpow])
     elif feature == 'cqt':
         sr = int(cc['CQT']['sampling_rate'])
         fr = int(cc['CQT']['frame_rate'])
         fc_min = float(cc['CQT']['minimum_center_frequency'])
         bpo = int(cc['CQT']['bins_per_octave'])
-        Feature = callables.CQT(sr, fr, fc_min, bpo)
+        Feature = callables.Compose(
+            [callables.CQT(sr, fr, fc_min, bpo), logpow]
+        ) 
     elif feature == 'gammatone':
-        Feature = GammatoneSpec
+        Feature = callables.Compose(
+            [GammatoneSpec, logpow]
+        )
     elif feature == 'melspec':
         nchan = int(cc['MFCC']['nchannels'])
-        Feature = callables.MFCC(STFT, nchan, 0)
+        Feature = callables.Compose(
+            [callables.MFCC(STFT, nchan, 0), logpow]
+        )
     elif feature == 'mfcc':
         nchan = int(cc['MFCC']['nchannels'])
         ncep = int(cc['MFCC']['ncepstra'])
@@ -179,7 +188,9 @@ def extract_cmd(files, feature, cfg):
         cmn = cc['PNCC']['cepstral_mean_normalization'].lower() == 'true'
         Feature = callables.PNCC(GammatoneSpec, ncep, cmn)
     elif feature == 'pnspec':
-        Feature = callables.PNCC(GammatoneSpec, 0)
+        Feature = callables.Compose(
+            [callables.PNCC(GammatoneSpec, 0), logpow]
+        )
     elif feature == 'modspec':
         cc = cc['ModulationSpec']
         sr = int(cc['sampling_rate'])
@@ -187,7 +198,9 @@ def extract_cmd(files, feature, cfg):
         nchan = int(cc['nchannels'])
         fc_mod = float(cc['modulation_frequency'])
         norm = cc['long_term_normalization'].lower() == 'true'
-        Feature = callables.ModulationSpec(sr, fr, nchan, fc_mod, norm)
+        Feature = callables.Compose(
+            [callables.ModSpec(sr, fr, nchan, fc_mod, norm), logpow]
+        )
     else:
         raise ValueError("Invalid feature.")
 
