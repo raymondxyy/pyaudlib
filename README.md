@@ -12,12 +12,10 @@ audlib provides a collection of utilities for developing speech-related applicat
 - Deep learning architectures for speech processing tasks in [PyTorch][pytorch]
 - PyTorch-compatible interface (similar to torchvision) for batch processing
 - A command-line interface with a unix-pipe-like syntax
-  - I/O utilities for interfacing with [CMUSPHINX][sphinx]
 
 Some use cases of audlib are:
 
 - Extracting common speech features for your backend
-- Integrating CMUSPHINX with modern deep learning architectures
 - Developing your own deep-learning-based tools for speech tasks
 - Quickly try out speech processors and visualize the spectrogram in command line
 
@@ -73,25 +71,17 @@ More extensive examples can be found in `examples/`.
 - 0.0.1
   - First release on PyPI
 
-## Authors
+## Contact 
 
-Raymond Xia - raymondxia@cmu.edu
+Please reach out to Raymond Xia (raymondxia@cmu.edu) for comments.
 
-Mahmoud Alismail - mahmoudi@andrew.cmu.edu
+More information about our research groups can be found on at
 
-Shangwu Yao - shangwuyao@gmail.com
-
-Andrew Wu - anwu.andrew@hotmail.com
-
-Feel free to send us any issue you find and question you have.
-
-## Contributing
-
-Please contact one of the authors.
+- [CMU Robust Speech Recognition Group](http://www.cs.cmu.edu/~robust/)
+- [Machine Learning for Signal Processing Group](http://mlsp.cs.cmu.edu/)
 
 ## License
 
 Distributed under the MIT license. See ``LICENSE`` for more information.
 
 [pytorch]: https://pytorch.org/
-[sphinx]: https://cmusphinx.github.io/
