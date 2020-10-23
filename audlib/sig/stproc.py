@@ -82,7 +82,7 @@ def numframes(sig, wind, hop, synth=False, center=False):
     return math.ceil((send-sstart)/hsize)
 
 
-def stana(sig, wind, hop, synth=False, center=False):
+def stana(sig, wind, hop, synth=False, center=False, apply_window=True):
     """[S]hort-[t]ime [Ana]lysis of audio signal by windowing.
 
     Parameters
@@ -135,8 +135,12 @@ def stana(sig, wind, hop, synth=False, center=False):
         sigpad = sig
 
     std = sigpad.strides[0]
-    return as_strided(sigpad, shape=(nframe, fsize),
-                      strides=(std*hsize, std)) * wind
+    frames = as_strided(sigpad, shape=(nframe, fsize),
+                        strides=(std*hsize, std))
+    if apply_window:
+        return frames * wind
+
+    return frames
 
     # Below is equivalent and more readable code for reference
     """
