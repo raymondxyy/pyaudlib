@@ -224,8 +224,8 @@ class TIMIT_ASR(TIMIT):
             transcript=transcrpt, phonemeseq=phoneseq,
             wordseq=wrdseq
         )
-        sample.phonemeseq = [
-            (t, PHONETABLE[p]) for t, p in sample.phonemeseq]
+        #sample.phonemeseq = [
+        #    (t, PHONETABLE[p]) for t, p in sample.phonemeseq]
         return sample
 
     def __init__(self, root, partition, filt=None, transform=None):

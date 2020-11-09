@@ -82,8 +82,9 @@ class ESC50(AudioDataset):
         self.meta = self.metaread(os.path.join(root, 'meta/esc50.csv'))
         self._all_categories = self.lstallcategories(self.meta)
         if categories:
-            assert all(c in self._all_categories for c in categories)
-            self.categories = {c: self._all_categories[c] for c in categories}
+            for c in categories:
+                assert c in self._all_categories, f"{c} does not exist."
+            self.categories = dict(zip(categories, range(len(categories))))
         else:
             self.categories = self._all_categories
 
@@ -101,7 +102,8 @@ class ESC50(AudioDataset):
 
     def read(self, path):
         """Parse a path into fields, and read audio."""
-        tar, cat = self.meta[os.path.basename(path)][1:3]
+        cat = self.meta[os.path.basename(path)][2]
+        tar = self.categories[cat]
         sig, ssr = audioread(os.path.join(self.root, path))
 
         return ESCAudio(sig, ssr, tar, cat)
