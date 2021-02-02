@@ -237,14 +237,14 @@ class ResRNN(torch.nn.Module):
         self.residues = residues
 
     def forward(self, x):
-        """Assume x is a PackedSequence."""
-        assert isinstance(x, PackedSequence), "Input is not PackedSequence!"
-
         for rnn, res in zip(self.rnns, self.residues):
             h, hn = rnn(x)
             if res:
-                x = PackedSequence(data=h.data+x.data,
-                                   batch_sizes=h.batch_sizes)
+                if isinstance(x, PackedSequence):
+                    x = PackedSequence(data=h.data+x.data,
+                                       batch_sizes=h.batch_sizes)
+                else:
+                    x = x + h
             else:
                 x = h
 

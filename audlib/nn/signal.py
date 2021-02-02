@@ -1,5 +1,6 @@
 """SIGNAL transform functions done in torch."""
 import torch
+import torch.fft as fft
 import torch.nn.functional as F
 
 
@@ -7,7 +8,7 @@ def firfreqz(h, ndft, squared=False):
     """Compute frequency response of an FIR filter."""
     assert ndft > h.size(-1), "Incompatible DFT size!"
     h = F.pad(h, (0, ndft-h.size(-1)))
-    hspec = torch.rfft(h, 1)
+    hspec = fft.rfft(h, 1)
     hspec = hspec[..., 0]**2 + hspec[..., 1]**2
     if squared:
         return hspec
@@ -18,7 +19,7 @@ def iirfreqz(h, ndft, squared=False, powerfloor=10**-3):
     """Compute frequency response of an IIR filter."""
     assert ndft > h.size(-1), "Incompatible DFT size!"
     h = F.pad(h, (0, ndft-h.size(-1)))
-    hspec = torch.rfft(h, 1)
+    hspec = fft.rfft(h, 1)
     hspec = (hspec[..., 0]**2 + hspec[..., 1]**2).clamp(min=powerfloor)
     if squared:
         return 1 / hspec
@@ -58,14 +59,14 @@ def hilbert(x, ndft=None):
     else:
         assert ndft > x.size(-1)
         sig = F.pad(x, (0, ndft-x.size(-1)))
-    xspec = torch.rfft(sig, 1, onesided=False)
+    xspec = fft.fft(sig)
     siglen = sig.size(-1)
-    h = torch.zeros(siglen, 2, dtype=sig.dtype, device=sig.device)
+    hh = torch.zeros(siglen, dtype=sig.dtype, device=sig.device)
     if siglen % 2 == 0:
-        h[0] = h[siglen//2] = 1
-        h[1:siglen//2] = 2
+        hh[0] = hh[siglen//2] = 1
+        hh[1:siglen//2] = 2
     else:
-        h[0] = 1
-        h[1:(siglen+1)//2] = 2
+        hh[0] = 1
+        hh[1:(siglen+1)//2] = 2
 
-    return torch.ifft(xspec * h, 1)
+    return fft.ifft(xspec * hh)

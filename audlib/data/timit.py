@@ -11,16 +11,25 @@ from .datatype import Audio
 PHONETABLE = {p: i for i, p in enumerate(
     """aa ae ah ao aw ax ax-h axr ay b bcl ch d dcl dh dx eh el em en
         eng epi er ey f g gcl h# hh hv ih ix iy jh k kcl l m n ng nx ow
-        oy p pau pcl q r s sh t tcl th uh uw ux v w y z zh""".split()
+        oy p pau pcl q r s sh t tcl th uh uw ux v w y z zh 1 2""".split()
     )}
 VOWELS = """iy ih eh ey ae aa aw ay ah ao oy ow uh uw ux er ax ix axr
             ax-h""".split()
 SEMIVOWELS = "l r w y hh hv el".split()
-STOPS = "b d g p t k dx q".split()
+STOPS = "b bcl d dcl g gcl p pcl t tcl k kcl dx q".split()
 AFFRICATES = "jh ch".split()
 FRICATIVES = "s sh z zh f th v dh".split()
 NASALS = "m n ng em en eng nx".split()
 OTHERS = "pau epi h# 1 2".split()
+TIMIT_PHONES = {
+    'vowels': VOWELS,
+    'semivowels': SEMIVOWELS,
+    'stops': STOPS,
+    'affricates': AFFRICATES,
+    'fricatives': FRICATIVES,
+    'nasals': NASALS,
+    'others': OTHERS
+}
 
 
 def phnread(path):
