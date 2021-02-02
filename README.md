@@ -24,6 +24,7 @@ audlib focuses on correctness, efficiency, and simplicity. Signal processing fun
 ## Breaking Changes
 
 - 0.0.3
+  - `nn.strfnet` is removed. See the official repository [here](https://github.com/raymondxyy/strfnet-IS2020).
   - `transform.stlogm` is removed
 - 0.0.2
   - `audioread` follows the interface of `soundfile.read`
