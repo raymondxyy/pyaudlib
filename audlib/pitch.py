@@ -1,11 +1,13 @@
-"""Implementations of Pitch (or sometimes called F0) Tracking."""
+"""Implementations of PITCH tracking algorithms."""
+from collections import deque
 import math
 import numpy as np
+import numpy.fft as fft
 from scipy.signal import lfilter
 
 from .sig.stproc import numframes, stana
 from .sig.temporal import lpc_parcor, lpcerr, xcorr
-from .sig.util import clipcenter, clipcenter3lvl
+from .sig.util import clipcenter, clipcenter3lvl, nextpow2
 
 ACF_FLOOR = 1e-4
 
@@ -479,3 +481,207 @@ class HistoPitch(object):
         t0 = np.array([pk2t0(*findpeaks(acf)) for acf in stacf])
 
         return t0
+
+
+class PraatPitch(object):
+    """Pitch dection used in Praat.
+
+    Boersma, Paul. “Accurate Short-Term Analysis of the Fundamental Frequency
+    and the Harmonics-to-Noise Ratio of a Sampled Sound.”
+    In Proc. Institute of Phonetic Sciences, 17:97–110, 1993.
+    """
+    def __init__(self, sr, timestep=0.01, n_candidates=5,
+                 min_pitch=75, max_pitch=600,
+                 voicing_threshold=0.45, silence_threshold=0.03,
+                 octave_cost=.01, voiced_unvoiced_cost=.14, octave_jump_cost=.35,
+                 ):
+        """Instantiate a PraatPitch class.
+
+        Parameters
+        ----------
+        sr: int
+            Sampling rate.
+
+        Keyword Parameters
+        ------------------
+        timestep: float, 0.01
+            Duration between frames; 1/timestep is the frame rate.
+        n_candidates: int, 4
+            Number of pitch candidates per frame, including the unvoiced.
+        min_pitch: float, 75
+            Minimum pitch to be detected in Hz.
+            Window length is set to be 3x or 6x (for HNR) max period.
+
+        """
+        assert min_pitch < max_pitch < (sr / 2), "Wrong pitch parameters!"
+
+        self.sr = sr
+        self.timestep = timestep
+
+        self.window = self.make_window(3 / min_pitch, 'hanning')
+        self.rww = self.xcorr(self.window)[0]
+        self.min_pitch = min_pitch
+        self.max_pitch = max_pitch
+        self.n_candidates = n_candidates
+
+        self.voicing_threshold = voicing_threshold
+        self.silence_threshold = silence_threshold
+        self.octave_cost = octave_cost
+        self.voiced_unvoiced_cost = voiced_unvoiced_cost
+        self.octave_jump_cost = octave_jump_cost
+
+    def xcorr(self, frames):
+        """Normalized autocorrelation."""
+        if len(frames.shape) == 1:
+            frames = frames[None, ...]
+        length = nextpow2(math.ceil(frames.shape[-1] * 1.5))
+        if length > frames.shape[-1]:
+            zp = np.zeros((len(frames), length - frames.shape[-1]))
+            frames = np.concatenate((frames, zp), axis=1)
+        spec = fft.fft(frames)
+        corr = fft.ifft(spec.real**2 + spec.imag**2).real
+        return corr / corr[:, 0][..., None]
+
+    def make_window(self, duration, window_type='gaussian'):
+        if window_type == 'gaussian':
+            ts = np.linspace(
+                -duration / 2, 3*duration / 2, int(duration * self.sr),
+                endpoint=False
+            )
+            return (np.exp(-12 * (ts / duration - .5)**2) - np.exp(-12))\
+                / (1 - np.exp(-12))
+        elif window_type == 'hanning':
+            ts = np.linspace(
+                0, duration, int(duration * self.sr),
+                endpoint=False
+            )
+            return 1/2 - 1/2 * np.cos(2*np.pi * ts / duration)
+        else:
+            raise ValueError(f'Invalid window type: {window_type}')
+
+    def stana(self, sig):
+        frames = stana(sig, self.window, int(self.sr*self.timestep),
+                       apply_window=False)
+        frames -= frames.mean(1)[..., None]
+        return frames * self.window
+
+    def lag_strength(self, frame, indices):
+        """Estimate precise lag and strength given peak indices.
+
+        NOTE: Do parabolic interpolation for now.
+        """
+        r = frame[indices]
+        r_m1 = frame[indices - 1]
+        r_p1 = frame[indices + 1]
+        tau_max = 1 / self.sr * (indices + 0.5 * (r_p1 - r_m1)\
+                             / (2*r - r_m1 - r_p1))
+        r_max = r + (r_p1 - r_m1)**2 / (8 * (2*r - r_m1 - r_p1))
+        return tau_max, r_max
+
+    def find_peaks(self, frames):
+        """Find fixed number of local maxima within candidate range."""
+        minlag = int(self.sr // self.max_pitch - 1)
+        maxlag = int(self.sr // self.min_pitch + 1)  # exclusive
+        assert 0 < minlag < maxlag <= frames.shape[-1]
+        out = []  # out[i] = [(lag [s], value), ...] of frame i
+        is_local_maxima = np.logical_and(
+            frames[:, minlag:maxlag] > frames[:, minlag-1:maxlag-1],
+            frames[:, minlag:maxlag] > frames[:, minlag+1:maxlag+1]
+        )
+        for frame, maxima in zip(frames, is_local_maxima):
+            maxima_index = np.argwhere(maxima)[:, 0] + minlag
+            lags, strengths = self.lag_strength(frame, maxima_index)
+            idx = np.argsort(strengths)[::-1][:self.n_candidates-1]
+            out.append((lags[idx], strengths[idx]))
+
+        # Decide voicing
+        global_peak = max([vv[0] if len(vv) else 0 for _, vv in out])
+        voiced = []
+        for _, vv in out:
+            if not len(vv):
+                voiced.append(False)
+                continue
+            voiced.append(
+                (vv[0] > self.voicing_threshold) \
+                and (vv[0] >= self.silence_threshold * global_peak)
+            )
+
+        return global_peak, out, voiced
+
+    def transition_cost(self, f1, f2):
+        if f1 == f2 == 0:
+            return 0
+        if (f1 == 0) ^ (f2 == 0):
+            return self.voiced_unvoiced_cost
+
+        return self.octave_jump_cost * np.abs(np.log2(f1 / f2))
+
+    def vad(self, local_peaks, global_peak):
+        frames = self.stana(sig)
+        corr = self.xcorr(frames) / self.rww
+        _, _, voicing = self.find_peaks(corr)
+        return voicing
+
+    def find_path(self, frequencies, strengths):
+        """Shortest path finding using dynamic programming."""
+        def _min_pitch(freqs, costs):
+            return min(zip(costs, freqs))[1]
+
+        nframes = len(strengths)
+        if nframes == 1:
+            return [_min_pitch(
+                frequencies[0], [-s for s in strengths[0]])
+            ]
+
+        costs = deque([[-s for s in strengths[0]]])
+        best_child = deque([[None] * len(frequencies[0])])  # for backtracing
+        for ii in range(1, nframes):
+            f_m1 = frequencies[ii-1]
+            c_m1 = costs[ii-1]
+            costs.append([])
+            best_child.append([])
+            for jj, ff in enumerate(frequencies[ii]):
+                ss = strengths[ii][jj]
+                cc = [
+                    cp + self.transition_cost(
+                        fp, ff) - ss for fp, cp in zip(f_m1, c_m1)
+                ]
+                min_cc, min_freq_idx = min(zip(cc, range(len(cc))))
+                costs[ii].append(min_cc)
+                best_child[ii].append(min_freq_idx)
+
+        _ , freq_idx = min(zip(costs[-1], range(len(costs[-1]))))
+        pitches = [frequencies.pop()[freq_idx]]
+        while True:
+            freq_idx = best_child.pop()[freq_idx]
+            if freq_idx is None:
+                break
+            pitches.append(frequencies.pop()[freq_idx])
+
+        return pitches[::-1]
+
+    def __call__(self, sig):
+        frames = self.stana(sig)
+        corr = self.xcorr(frames)
+        corr[:, :len(self.window//2+1)] /= self.rww[:len(self.window//2+1)]
+        global_peak, candidates, voicing = self.find_peaks(corr)
+
+        # Compute strengths
+        strengths = deque([])
+        frequencies = deque([])
+        for lag, val in candidates:
+            if not len(val):  # no peak
+                strengths.append([self.voicing_threshold + 2])
+                frequencies.append([0])
+                continue
+            unvoiced = self.voicing_threshold + max(
+                0, 2 - val[0] / global_peak /\
+                (self.silence_threshold / (1 + self.voicing_threshold))
+            )
+            voiced = val - self.octave_cost * np.log2(self.min_pitch * lag)
+            strengths.append([unvoiced] + voiced.tolist())
+            frequencies.append([0] + (1 / lag).tolist())
+
+        pitch = self.find_path(frequencies, strengths)
+
+        return pitch
