@@ -5,7 +5,7 @@ import numpy as np
 import numpy.fft as fft
 from scipy.signal import lfilter
 
-from .sig.stproc import numframes, stana
+from .sig.stproc import numframes, stana, stcenters
 from .sig.temporal import lpc_parcor, lpcerr, xcorr
 from .sig.util import clipcenter, clipcenter3lvl, nextpow2
 
@@ -490,10 +490,11 @@ class PraatPitch(object):
     and the Harmonics-to-Noise Ratio of a Sampled Sound.”
     In Proc. Institute of Phonetic Sciences, 17:97–110, 1993.
     """
-    def __init__(self, sr, timestep=0.01, n_candidates=5,
+    def __init__(self, sr, timestep=0.01, n_candidates=15,
                  min_pitch=75, max_pitch=600,
                  voicing_threshold=0.45, silence_threshold=0.03,
                  octave_cost=.01, voiced_unvoiced_cost=.14, octave_jump_cost=.35,
+                 wtype='hanning'
                  ):
         """Instantiate a PraatPitch class.
 
@@ -518,8 +519,9 @@ class PraatPitch(object):
         self.sr = sr
         self.timestep = timestep
 
-        self.window = self.make_window(3 / min_pitch, 'hanning')
-        self.rww = self.xcorr(self.window)[0]
+        self.window = self.make_window(3 / min_pitch, wtype)
+        self.nfft = nextpow2(math.ceil(len(self.window) * 1.5))
+        self.rww = self.autocorr(self.window)[0]
         self.min_pitch = min_pitch
         self.max_pitch = max_pitch
         self.n_candidates = n_candidates
@@ -530,15 +532,11 @@ class PraatPitch(object):
         self.voiced_unvoiced_cost = voiced_unvoiced_cost
         self.octave_jump_cost = octave_jump_cost
 
-    def xcorr(self, frames):
+    def autocorr(self, frames):
         """Normalized autocorrelation."""
         if len(frames.shape) == 1:
             frames = frames[None, ...]
-        length = nextpow2(math.ceil(frames.shape[-1] * 1.5))
-        if length > frames.shape[-1]:
-            zp = np.zeros((len(frames), length - frames.shape[-1]))
-            frames = np.concatenate((frames, zp), axis=1)
-        spec = fft.fft(frames)
+        spec = fft.fft(frames, self.nfft)
         corr = fft.ifft(spec.real**2 + spec.imag**2).real
         return corr / corr[:, 0][..., None]
 
@@ -561,9 +559,16 @@ class PraatPitch(object):
 
     def stana(self, sig):
         frames = stana(sig, self.window, int(self.sr*self.timestep),
-                       apply_window=False)
+                       center=True, apply_window=False)
         frames -= frames.mean(1)[..., None]
         return frames * self.window
+
+    def stcenters(self, sig, center=True):
+        """Return the beginning of each window in samples."""
+        centers = stcenters(
+            sig, self.window, int(self.sr*self.timestep),
+            center=center)
+        return centers
 
     def lag_strength(self, frame, indices):
         """Estimate precise lag and strength given peak indices.
@@ -616,12 +621,6 @@ class PraatPitch(object):
 
         return self.octave_jump_cost * np.abs(np.log2(f1 / f2))
 
-    def vad(self, local_peaks, global_peak):
-        frames = self.stana(sig)
-        corr = self.xcorr(frames) / self.rww
-        _, _, voicing = self.find_peaks(corr)
-        return voicing
-
     def find_path(self, frequencies, strengths):
         """Shortest path finding using dynamic programming."""
         def _min_pitch(freqs, costs):
@@ -660,10 +659,109 @@ class PraatPitch(object):
 
         return pitches[::-1]
 
+    def find_rough_markers(self, sig, pitch):
+        """Find rough markers using extracted pitch."""
+        from scipy import signal
+
+        # Find voicing boundary
+        centers = self.stcenters(sig, center=True)
+        voicing_range = []  # (index start, index end)
+        ii = 0
+        while ii < len(pitch):
+            if pitch[ii] == 0:
+                ii += 1
+                continue
+            ns = ii
+            while pitch[ii]:
+                ii += 1
+                if ii == len(pitch):
+                    break
+            ne = ii
+            voicing_range.append((ns, ne))
+
+        f0 = min([p for p in pitch if p > 0])
+        hh = signal.firwin(
+            101, [f0, 1.5*f0], fs=self.sr, pass_zero='bandpass'
+        )
+        filtered = signal.lfilter(
+            hh, 1, np.concatenate((np.zeros(50), sig))
+        )[50:]
+        markers = []
+        for ns, ne in voicing_range:
+            ts = int(centers[ns])
+            te = int(centers[ne])
+            seg = filtered[ts:te]
+            pitch_seg = pitch[ns:ne]
+            negative_zc, = np.nonzero(
+                np.logical_and(
+                    np.sign(seg[:-1]) == 1,
+                    np.sign(seg[1:]) == -1)
+            )
+            if len(negative_zc) == 0:
+                continue
+            if len(negative_zc) == 1:
+                markers.append(negative_zc + ts)
+                continue
+
+            # Filter zcs based on pitch
+            flags = np.ones_like(negative_zc, dtype='bool')
+            # NOTE: this range is an approximation
+            pmin, pmax = 0.8*min(pitch_seg), 1.2*max(pitch_seg)
+            zc_m1 = negative_zc[0]
+            for ii, zc in enumerate(negative_zc[1:]):
+                pps = self.sr / (zc - zc_m1)
+                if pmin <= pps <= pmax:  # good candidate
+                    zc_m1 = zc
+                    continue
+                flags[ii+1] = False
+
+            markers.append(negative_zc[flags] + ts)
+
+        return np.concatenate(markers)
+
+    def find_pulses_wm(self, sig, rough_markers, look_percentage=.25):
+        """Finding pitch pulses by waveform matching (crosscorrelation)."""
+        if len(rough_markers) < 2:
+            return []
+
+        r1, r2 = rough_markers[:2]
+        pulses = [np.argmin(sig[r1:r2]) + r1]
+        for ii, r in enumerate(rough_markers[1:]):
+            p_m1 = pulses[ii]
+            r_m1 = rough_markers[ii]
+            p = r + (p_m1 - r_m1)
+            lookp = look_percentage
+            while True:
+                j1 = int(p - lookp * (p - p_m1))
+                j2 = int(p + lookp * (p - p_m1))
+                #print(f"Pm1={p_m1}, J1={j1}, J2={j2}")
+                jj_min, err_min = j1, 1e3
+                for jj in range(j1, j2 + 1):  # NOTE: naive implementation
+                    offset = jj - p_m1
+                    buf1 = sig[p_m1:jj]
+                    buf2 = sig[jj:jj+offset]
+                    #err = sum((buf1 - buf2) **2) / offset
+                    buf1 = buf1 / buf1.dot(buf1)
+                    buf2 = buf2 / buf2.dot(buf2)
+                    err = -buf1.dot(buf2)
+                    if err < err_min:
+                        err_min = err
+                        jj_min = jj
+
+                if jj_min in (j1, j2):
+                    lookp += .05  # expand by 5% each time
+                    print(f"EXPAND look range percentage to {100*lookp:.1f}")
+                    continue
+
+                pulses.append(jj_min)
+                break
+
+        return pulses
+
     def __call__(self, sig):
         frames = self.stana(sig)
-        corr = self.xcorr(frames)
-        corr[:, :len(self.window//2+1)] /= self.rww[:len(self.window//2+1)]
+        corr = self.autocorr(frames)
+        corr[:, :len(self.window)//2+1] /= self.rww[:len(self.window)//2+1]
         global_peak, candidates, voicing = self.find_peaks(corr)
 
         # Compute strengths
@@ -682,6 +780,6 @@ class PraatPitch(object):
             strengths.append([unvoiced] + voiced.tolist())
             frequencies.append([0] + (1 / lag).tolist())
 
-        pitch = self.find_path(frequencies, strengths)
+        pitches = self.find_path(frequencies, strengths)
 
-        return pitch
+        return pitches

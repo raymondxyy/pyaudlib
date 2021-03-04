@@ -70,12 +70,26 @@ def test_histopitch():
     pitch2 = hist_based.pitchcontour2(hist, uv1, neighbor=.1)
 
 def test_praatpitch():
+    import matplotlib.pyplot as plt
     from audlib.pitch import PraatPitch
-
-    praat = PraatPitch(sr, voiced_unvoiced_cost=0.4, max_pitch=400)
-    pitches = praat(sig)
     from pprint import pprint
+    praat = PraatPitch(sr, max_pitch=200, min_pitch=75)
+    pitches = praat(sig)
     pprint(pitches)
+    pitches = np.array(pitches)
+
+    fig, ax = plt.subplots()
+    taxis = np.arange(len(sig)) / sr
+    ax.plot(taxis, sig, label='Speech')
+    #ax.plot(taxis, praat.find_rough_markers(sig, pitches), label='LPF')
+    # Plot pulses
+    rough_markers = praat.find_rough_markers(sig, pitches)
+    pulses = praat.find_pulses_wm(sig, rough_markers)
+    for mm in rough_markers:
+        ax.axvline(mm / sr, -1, 1, color='k')
+    for mm in pulses:
+        ax.axvline(mm / sr, -1, 1, color='b')
+    plt.show()
 
 
 if __name__ == '__main__':
