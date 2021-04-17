@@ -84,11 +84,14 @@ def test_praatpitch():
     #ax.plot(taxis, praat.find_rough_markers(sig, pitches), label='LPF')
     # Plot pulses
     rough_markers = praat.find_rough_markers(sig, pitches)
-    pulses = praat.find_pulses_wm(sig, rough_markers)
-    for mm in rough_markers:
+    pulses = [praat.find_pulses_wm(sig, mm) for mm in rough_markers]
+
+    def flatten(lst): return [elem for slst in lst for elem in slst]
+
+    for mm in flatten(rough_markers):
         ax.axvline(mm / sr, -1, 1, color='k')
-    for mm in pulses:
-        ax.axvline(mm / sr, -1, 1, color='b')
+    for pp in flatten(pulses):
+        ax.axvline(pp / sr, -1, 1, color='b')
     plt.show()
 
 

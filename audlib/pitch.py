@@ -717,9 +717,9 @@ class PraatPitch(object):
 
             markers.append(negative_zc[flags] + ts)
 
-        return np.concatenate(markers)
+        return markers
 
-    def find_pulses_wm(self, sig, rough_markers, look_percentage=.25):
+    def find_pulses_wm(self, sig, rough_markers, look_percentage=.10):
         """Finding pitch pulses by waveform matching (crosscorrelation)."""
         if len(rough_markers) < 2:
             return []
@@ -740,10 +740,10 @@ class PraatPitch(object):
                     offset = jj - p_m1
                     buf1 = sig[p_m1:jj]
                     buf2 = sig[jj:jj+offset]
-                    #err = sum((buf1 - buf2) **2) / offset
-                    buf1 = buf1 / buf1.dot(buf1)
-                    buf2 = buf2 / buf2.dot(buf2)
-                    err = -buf1.dot(buf2)
+                    err = sum((buf1 - buf2) **2) / offset
+                    #buf1 = buf1 / buf1.dot(buf1)
+                    #buf2 = buf2 / buf2.dot(buf2)
+                    #err = -buf1.dot(buf2)
                     if err < err_min:
                         err_min = err
                         jj_min = jj
