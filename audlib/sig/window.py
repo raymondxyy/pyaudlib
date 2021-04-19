@@ -54,6 +54,7 @@ def hamming(wsize, hop=None, nchan=None, synth=False):
             assert tnorm(wind, hop),\
                 "[wsize:{}, hop:{}] violates COLA in time.".format(wsize, hop)
         elif nchan is not None:  # for perfect filterbank synthesis
+            wind = np.hamming(wsize)
             assert fnorm(wind, nchan),\
                 "[wsize:{}, nchan:{}] violates COLA in frequency.".format(
                     wsize, nchan)

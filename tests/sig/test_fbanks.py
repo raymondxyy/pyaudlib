@@ -3,6 +3,9 @@ from audlib.quickstart import welcome
 from audlib.sig.window import hamming
 from audlib.sig.transform import stmfcc
 
+import numpy as np
+import scipy.signal as signal
+
 sig, sr = welcome()
 
 
@@ -28,7 +31,24 @@ def test_cqt():
 
     return
 
+def test_fbs():
+    """Test filterbank synthesis."""
+    window_length = 0.02
+    window_size = int(window_length * sr)
+    window = hamming(window_size, nchan=window_size, synth=True)
+    synth = np.zeros(sig.shape, dtype=np.complex_)
+    for kk in range(window_size):
+        wk = 2 * np.pi * (kk / window_size)
+        band = signal.lfilter(
+            window * np.exp(1j*wk*np.arange(window_size)), 1, sig
+        )
+        synth[:] = synth[:] + band
+
+    assert np.allclose(synth.real, sig)
+    return
+
 
 if __name__ == '__main__':
+    test_fbs()
     test_mfcc()
     test_cqt()
