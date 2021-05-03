@@ -258,63 +258,63 @@ def levenshtein(src, tar):
 
     Returns
     -------
-    type: tuple of 4 int
-    Total distance, number of deletions, insertions, and substitutions.
+    type: tuple of 2 items
+        - number of deletions, insertions, and substitutions
+        - Generator of edits to transform src to tar in the following format
+          Action, Char
+          None, Char means Char from src is kept.
 
     """
     ss = len(src)
     tt = len(tar)
     if ss == 0:
-        return tt, 0, tt, 0
+        return (0, tt, 0), (('I', cc) for cc in tar)
     if tt == 0:
-        return ss, ss, 0, 0
+        return (ss, 0, 0), (('D', cc) for cc in src)
 
-    UP, LEFT, UPLEFT = 'DIS'  # order is important for tiebreak
-    costs = []  # holds cached cost and parent node at each (i,j)
-    for ii in range(ss+1):
-        if ii == 0:
-            costs.append([(0, None)] + [(i, LEFT) for i in range(1, tt+1)])
-            continue
-        costs.append([])
-        for jj in range(tt+1):
-            if jj == 0:
-                costs[ii].append((ii, UP))
-                continue
-            cost = 0 if (src[ii-1] == tar[jj-1]) else 1
-            up = jj + 1 if ii-1 < 0 else costs[ii-1][jj][0]
-            left = ii + 1 if jj-1 < 0 else costs[ii][jj-1][0]
-            if ii-1 < 0 and jj-1 < 0:
-                upleft = 0
-            elif ii-1 < 0:
-                upleft = jj
-            elif jj-1 < 0:
-                upleft = ii
-            else:
-                upleft = costs[ii-1][jj-1][0]
-
-            # break tie by: deletion, insertion, substitution
-            costs[ii].append(min(zip((up+1, left+1, upleft+cost),
-                                     (UP, LEFT, UPLEFT))))
+    NON, DEL, INS, SUB = 'abcd'  # order is important for tiebreak
+    paths = []  # holds (total cost, edit)
+    paths.append(
+        [(0, (None, None))] + [(i+1, (INS, c)) for i, c in enumerate(tar)]
+    )
+    for ii, cc in enumerate(src):
+        paths.append([(ii+1, (DEL, cc))])
+    for ii in range(1, ss+1):
+        for jj in range(1, tt+1):
+            delete = (paths[ii-1][jj][0] + 1, (DEL, src[ii-1]))
+            insert = (paths[ii][jj-1][0] + 1, (INS, tar[jj-1]))
+            if src[ii-1] == tar[jj-1]:  # diagonal match
+                diag = (paths[ii-1][jj-1][0], (NON, src[ii-1]))
+            else:  # SUB error
+                diag = (paths[ii-1][jj-1][0] + 1, (SUB, (src[ii-1], tar[jj-1])))
+            paths[ii].append(min(delete, insert, diag))
 
     # Backtrack to beginning and record types of error along the way
     insert = 0
     delete = 0
     substitute = 0
     ii, jj = ss, tt
-    cost, parent = costs[ii][jj]  # start from bottom right
-    while parent:
-        if parent == UP:
+    edits = []
+    _, (action, char) = paths[ii][jj]  # start from bottom right
+    while action:
+        if action == DEL:
             ii -= 1
             delete += 1
-        elif parent == LEFT:
+            edits.append(('D', char))
+        elif action == INS:
             jj -= 1
             insert += 1
+            edits.append(('I', char))
+        elif action == SUB:
+            ii -= 1
+            jj -= 1
+            substitute += 1
+            edits.append(('S', char))
         else:
             ii -= 1
             jj -= 1
-            if cost != costs[ii][jj][0]:
-                substitute += 1
+            edits.append((None, char))
 
-        cost, parent = costs[ii][jj]
+        _, (action, char) = paths[ii][jj]
 
-    return costs[-1][-1][0], delete, insert, substitute
+    return (delete, insert, substitute), reversed(edits)
