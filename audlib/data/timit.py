@@ -219,6 +219,12 @@ class TIMIT_ASR(TIMIT):
 
         return 'SA' not in os.path.basename(path)
 
+    def is_train_exclude_sa(self, path):
+        if not self.isaudio(path):
+            return False
+
+        return 'SA' not in os.path.basename(path)
+
     def read(self, path):
         """Different options to read an audio file."""
         pbase = os.path.splitext(path)[0]
@@ -244,20 +250,20 @@ class TIMIT_ASR(TIMIT):
         )
         if partition.lower() == 'train':
             root = os.path.join(root, 'TIMIT/TRAIN')
-            filt = None
+            _filt = self.is_train_exclude_sa
         elif partition.lower() == 'core-test':
             root = os.path.join(root, 'TIMIT/TEST')
-            filt = self.is_core_test
+            _filt = self.is_core_test
         elif partition.lower() == 'complete-test':
             root = os.path.join(root, 'TIMIT/TEST')
-            filt = self.is_complete_test
+            _filt = self.is_complete_test
         else:
             raise ValueError(
                 "partition must be one of train/core-test/complete-test."
             )
         self.partition = partition.lower()
 
-        super(TIMIT, self).__init__(root, filt=filt, transform=transform)
+        super(TIMIT, self).__init__(root, filt=_filt, transform=transform)
 
 
 class TIMIT_SID(TIMIT):
