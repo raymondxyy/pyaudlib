@@ -1,7 +1,7 @@
 """WINDOW and related utilities for short-time signal analysis."""
 
 import numpy as np
-from .util import nextpow2, firfreqz
+from .util import nextpow2, fftfirfreqz
 
 
 def hamming(wsize, hop=None, nchan=None, synth=False):
@@ -200,7 +200,7 @@ def fcola(wind, nchan):
     resp = np.zeros(nfft, dtype=np.complex_)
     for kk in range(nchan):
         wk = 2*np.pi * (kk*1./nchan)  # modulation frequency
-        _, hh = firfreqz(wind * np.exp(1j*wk*np.arange(len(wind))), nfft)
+        _, hh = fftfirfreqz(wind * np.exp(1j*wk*np.arange(len(wind))), nfft)
         resp += hh
     magresp = np.abs(resp)
 

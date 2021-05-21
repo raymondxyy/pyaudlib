@@ -5,7 +5,7 @@ from numpy.lib.stride_tricks import as_strided
 from scipy.linalg import toeplitz, solve_toeplitz, inv, cholesky
 from scipy.signal import fftconvolve, lfilter
 
-from .util import freqz
+from .util import fftfreqz
 
 
 def conv(sig, hr, zphase=False):
@@ -239,7 +239,7 @@ def lpcspec(alphas, nfft, gain=None):
     """Compute magnitude spectrum envelope using LPC coefficents."""
     b = gain if gain is not None else 1
     a = pred2poly(alphas)
-    ww, hh = freqz(b, a, nfft)
+    ww, hh = fftfreqz(b, a, nfft)
     return ww, np.abs(hh)
 
 

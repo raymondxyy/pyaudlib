@@ -24,6 +24,7 @@ audlib focuses on correctness, efficiency, and simplicity. Signal processing fun
 ## Breaking Changes
 
 - 0.0.3
+  - `sig.util.freqz` becomes `sig.util.fftfreqz`
   - `nn.strfnet` is removed. See the official repository [here](https://github.com/raymondxyy/strfnet-IS2020).
   - `transform.stlogm` is removed
 - 0.0.2

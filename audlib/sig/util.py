@@ -97,14 +97,31 @@ def clipcenter3lvl(sig, threshold):
     return out
 
 
-def firfreqz(h, nfft):
+def fftfirfreqz(h, nfft):
     """Compute frequency response of an FIR filter."""
     ww = np.linspace(0, 2, num=nfft, endpoint=False)
     hh = fft(h, n=nfft)
     return ww, hh
 
 
-def iirfreqz(h, nfft, ceiling=FREQZ_CEILING):
+def firfreqz(h, omegas):
+    """Evaluate frequency response of an FIR filter at discrete frequencies.
+
+    Parameters
+    h: array_like
+        FIR filter coefficient array for numerator polynomial.
+        e.g. H(z) = 1 + a*z^-1 + b*z^-2
+             h = [1, a, b]
+
+    """
+    hh = np.zeros(omegas.shape, dtype='complex128')
+    for ii, aa in enumerate(h):
+        hh[:] = hh[:] + aa * np.exp(-1j * omegas*ii)
+
+    return hh
+
+
+def fftiirfreqz(h, nfft, ceiling=FREQZ_CEILING):
     """Compute frequency response of an IIR filter.
 
     Parameters
@@ -128,11 +145,27 @@ def iirfreqz(h, nfft, ceiling=FREQZ_CEILING):
     return ww, hh
 
 
-def freqz(b, a, nfft, ceiling=FREQZ_CEILING):
+def iirfreqz(h, omegas, ceiling=FREQZ_CEILING):
+    """Evaluate frequency response of an IIR filter at discrete frequencies."""
+    hh_inv = firfreqz(h, omegas)
+    hh = np.zeros_like(hh_inv)
+    zeros = hh_inv == 0
+    hh[~zeros] = 1 / hh_inv
+    hh[zeros] = ceiling
+    return hh
+
+
+def fftfreqz(b, a, nfft, ceiling=FREQZ_CEILING):
     """Compute the frequency response of a z-transform polynomial."""
-    ww, hh_numer = firfreqz(b, nfft)
-    __, hh_denom = iirfreqz(a, nfft, ceiling=ceiling)
+    ww, hh_numer = fftfirfreqz(b, nfft)
+    __, hh_denom = fftiirfreqz(a, nfft, ceiling=ceiling)
     return ww, hh_numer*hh_denom
+
+
+def freqz(b, a, omegas, ceiling=FREQZ_CEILING):
+    hh_numer = firfreqz(b, omegas)
+    hh_denom = iirfreqz(a, omegas)
+    return hh_numer * hh_denom
 
 
 def nextpow2(n):

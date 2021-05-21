@@ -6,7 +6,7 @@ from numpy.fft import rfft, fft
 from scipy.fftpack import dct
 
 from .auditory import hz2mel, mel2hz
-from .auditory import erb_space, erb_filters, erb_fbank, erb_freqz
+from .auditory import erb_space, erb_filters, erb_fbank, erb_fftfreqz, erb_freqz
 from .window import hamming
 from .temporal import convdn, conv
 from .spectral import logmag
@@ -253,7 +253,7 @@ class Gammatone(Filterbank):
         """Get filter coefficients of k-th channel."""
         return self.filters[k]
 
-    def freqz(self, k, nfft=1024, powernorm=False):
+    def fftfreqz(self, k, nfft=1024, powernorm=False):
         """Compute k-th channel's frequency reponse.
 
         Parameters
@@ -265,15 +265,32 @@ class Gammatone(Filterbank):
         powernorm: bool, False
             Normalize power to unity if True.
         """
-        ww, hh = erb_freqz(*self.filters[k], nfft)
+        ww, hh = erb_fftfreqz(*self.filters[k], nfft)
         if powernorm:
             hh /= sum(hh.real**2 + hh.imag**2)
 
         return ww, hh
 
+    def freqz(self, k, omegas, powernorm=False):
+        hh = erb_freqz(*self.filters[k], omegas)
+        if powernorm:
+            hh /= sum(hh.real**2 + hh.imag**2)
+        return hh
+
     def filter(self, sig, k, cascade=True):
         """Filter signal with k-th channel."""
         return erb_fbank(sig, *self.filters[k], cascade=cascade)
+
+    def frequency_integration(self, omegas, powernorm=False, squared=True):
+        """Return a matrix that interpolates channels to frequencies."""
+        wts = np.empty((len(omegas), self.num_chan))
+        for kk in range(self.num_chan):
+            wts[:, kk] = np.abs(self.freqz(kk, omegas, powernorm))
+
+        if squared:
+            return wts **2
+
+        return wts
 
     def gammawgt(self, nfft, powernorm=False, squared=True):
         """Return the Gammatone weighting function for STFT.
@@ -289,7 +306,7 @@ class Gammatone(Filterbank):
         """
         wts = np.empty((nfft//2+1, self.num_chan))
         for k in range(self.num_chan):
-            wts[:, k] = np.abs(self.freqz(k, nfft, powernorm)[1][:nfft//2+1])
+            wts[:, k] = np.abs(self.fftfreqz(k, nfft, powernorm)[1][:nfft//2+1])
 
         if squared:
             wts = wts**2
